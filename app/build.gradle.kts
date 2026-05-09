@@ -11,7 +11,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "org.happysanta.gd"
+        applicationId = "org.happysanta.gd.try2"
         minSdk = 23
         targetSdk = 36
         versionCode = 1
