@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Cleartext HTTP is denied by default since API 28. The legacy level
+    server (gdtr.net) only serves plaintext HTTP, so we narrowly permit
+    cleartext for those two hosts only. Everything else stays HTTPS-only.
+
+    See API/API.java for the URLs (URL, DEBUG_URL, MRG_URL).
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">gdtr.net</domain>
+        <domain includeSubdomains="false">dev.gdtr.net</domain>
+    </domain-config>
+</network-security-config>
