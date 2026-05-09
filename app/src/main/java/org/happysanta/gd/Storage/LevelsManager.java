@@ -15,6 +15,7 @@ import org.happysanta.gd.GDActivity;
 import org.happysanta.gd.Global;
 import org.happysanta.gd.Levels.LevelHeader;
 import org.happysanta.gd.Levels.Reader;
+// LevelSource / AssetLevelSource are in this same package (Storage) — no import needed.
 import org.happysanta.gd.Menu.Menu;
 import org.happysanta.gd.Menu.MenuScreen;
 import org.happysanta.gd.R;
@@ -121,6 +122,26 @@ public class LevelsManager {
 		if (currentLevel.getId() > 1)
 			return getMrgFileById(currentLevel.getId());
 
+		return null;
+	}
+
+	/**
+	 * Returns the {@link LevelSource} that {@link org.happysanta.gd.Levels.Loader}
+	 * should read from for the current level.
+	 *
+	 * <p>Built-in level (id == 1) → bundled {@code assets/levels.mrg} via
+	 * {@link AssetLevelSource}. Downloaded levels (id &gt; 1) → currently
+	 * {@code null}, which makes {@code Loader} fall back to the asset
+	 * stream too. Commit 3 wires the SAF-backed {@code DocumentLevelSource}
+	 * here. Until then downloads don't land anywhere reachable, so id &gt; 1
+	 * is unreachable in practice ({@code mrgIsAvailable} forces a reset to
+	 * id == 1 in the constructor).
+	 */
+	public LevelSource getCurrentLevelSource() {
+		if (currentLevel.getId() == 1) {
+			return new AssetLevelSource(getGDActivity(), "levels.mrg");
+		}
+		logDebug("LevelsManager.getCurrentLevelSource: id > 1 not yet wired (commit 3); falling back to assets");
 		return null;
 	}
 

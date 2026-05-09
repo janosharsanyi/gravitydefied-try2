@@ -462,14 +462,14 @@ public class GDActivity extends Activity implements Runnable {
 
 				levelsManager = new LevelsManager();
 				try {
-					levelLoader = new Loader(levelsManager.getCurrentLevelsFile());
+					levelLoader = new Loader(levelsManager.getCurrentLevelSource());
 				} catch (IOException e) {
 					e.printStackTrace();
 					// logDebug("Reset level id now");
 					levelsManager.resetId();
 					levelsManager.reload();
 
-					levelLoader = new Loader(levelsManager.getCurrentLevelsFile());
+					levelLoader = new Loader(levelsManager.getCurrentLevelSource());
 				}
 
 				physEngine = new Physics(levelLoader);

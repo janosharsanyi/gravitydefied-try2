@@ -4,10 +4,9 @@ import org.happysanta.gd.GDActivity;
 import org.happysanta.gd.Game.GameView;
 import org.happysanta.gd.Menu.SimpleMenuElement;
 import org.happysanta.gd.Game.Physics;
+import org.happysanta.gd.Storage.LevelSource;
 
 import java.io.DataInputStream;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -21,7 +20,10 @@ public class Loader {
 	//public static final int m_doI;
 	// public static final int m_ifI = 1;
 
-	public File levelsFile;
+	// null = load built-in levels.mrg from assets (legacy default behavior).
+	// Non-null = load from a SAF document (or any other LevelSource impl).
+	// Replaces the old `public File levelsFile` from the J2ME-era port.
+	public LevelSource source;
 	public Level levels;
 	public int m_nullI;
 	public int m_fI;
@@ -48,9 +50,9 @@ public class Loader {
 		reset();
 	}
 
-	public Loader(File levelsFile) throws IOException {
-		if (levelsFile != null)
-			this.levelsFile = levelsFile;
+	public Loader(LevelSource source) throws IOException {
+		if (source != null)
+			this.source = source;
 		reset();
 	}
 
@@ -77,16 +79,19 @@ public class Loader {
 	}
 
 
-	public void setLevelsFile(File file) throws IOException {
-		levelsFile = file;
+	public void setSource(LevelSource source) throws IOException {
+		this.source = source;
 		reset();
 	}
 
 	public InputStream getLevelsInputStream(String s) throws IOException {
-		if (levelsFile == null)
+		// `s` is preserved for the asset-fallback path. When a LevelSource
+		// is set, the source itself decides where the bytes come from —
+		// it's the per-level .mrg, not a named asset.
+		if (source == null)
 			return GDActivity.shared.getAssets().open(s);
 		else
-			return new FileInputStream(levelsFile);
+			return source.open();
 	}
 
 	private void readLevels() throws IOException {
