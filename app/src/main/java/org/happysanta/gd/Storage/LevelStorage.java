@@ -6,12 +6,16 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 
+import android.provider.DocumentsContract;
+
 import androidx.documentfile.provider.DocumentFile;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * User-visible, SAF-backed storage for downloaded {@code {id}.mrg} level
@@ -27,10 +31,13 @@ import java.io.OutputStream;
  * the user chose where they live) without needing the Play-restricted
  * {@code MANAGE_EXTERNAL_STORAGE} permission.
  *
- * <p>Files are named {@code {id}.mrg} where {@code id} is the level row's
- * primary key in {@link LevelsDataSource}. The built-in {@code levels.mrg}
- * (id == 1) is bundled in {@code assets/} and lives outside this storage
- * — see {@link AssetLevelSource}.
+ * <p>Files are addressed by filename (e.g. {@code "Crazy Cliffs.mrg"}). The
+ * filename is chosen at install time by sanitizing the user-visible name
+ * via {@link Filenames#sanitizeBase}, then resolving collisions with
+ * {@link Filenames#uniqueIn}. The DB row keeps the chosen filename in
+ * {@code LEVELS_COLUMN_FILENAME} so we can find the file on disk again.
+ * The built-in {@code levels.mrg} (id == 1) is bundled in {@code assets/}
+ * and lives outside this storage — see {@link AssetLevelSource}.
  *
  * <p>This class only owns the tree URI + per-file lookups. Launching the
  * picker {@link Intent} belongs to the activity (it owns the
@@ -79,31 +86,65 @@ public class LevelStorage {
 
 	/**
 	 * Persist a freshly-picked tree URI: takes persistable read/write
-	 * permission and stores the URI in {@link SharedPreferences}.
+	 * permission and stores the URI in {@link SharedPreferences}. If a
+	 * different folder was previously persisted, releases that grant so
+	 * we don't accumulate stale permissions over time.
 	 */
 	public void setLocation(Uri treeUri) {
+		Uri previous = getLocation();
 		int flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
 				| Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
-		context.getContentResolver().takePersistableUriPermission(treeUri, flags);
+		ContentResolver resolver = context.getContentResolver();
+		resolver.takePersistableUriPermission(treeUri, flags);
+		if (previous != null && !previous.equals(treeUri)) {
+			try {
+				resolver.releasePersistableUriPermission(previous, flags);
+			} catch (SecurityException ignore) {
+				// Old grant already gone — nothing to release.
+			}
+		}
 		prefs.edit().putString(KEY_TREE_URI, treeUri.toString()).apply();
+	}
+
+	/**
+	 * Build an intent that asks a file-manager-like app to view the chosen
+	 * folder's contents. Only works on devices with an app that handles
+	 * {@code ACTION_VIEW} on a directory document URI (Files / Material
+	 * Files / etc.). Returns {@code null} if no folder is set.
+	 *
+	 * <p>Caller should {@code startActivity} inside a try/catch on
+	 * {@link android.content.ActivityNotFoundException} since stock Android
+	 * has no guaranteed handler.
+	 */
+	public Intent createViewFolderIntent() {
+		Uri treeUri = getLocation();
+		if (treeUri == null) return null;
+		Uri docUri = DocumentsContract.buildDocumentUriUsingTree(
+				treeUri, DocumentsContract.getTreeDocumentId(treeUri));
+		Intent intent = new Intent(Intent.ACTION_VIEW);
+		intent.setDataAndType(docUri, DocumentsContract.Document.MIME_TYPE_DIR);
+		intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+				| Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+		return intent;
 	}
 
 	// --- Per-level file ops ---------------------------------------------------
 
-	/** True if {@code {id}.mrg} exists in the chosen folder. */
-	public boolean hasLevel(long id) {
-		DocumentFile file = findLevel(id);
+	/** True if {@code filename} exists in the chosen folder. */
+	public boolean hasLevel(String filename) {
+		if (filename == null || filename.isEmpty()) return false;
+		DocumentFile file = findLevel(filename);
 		return file != null && file.exists();
 	}
 
 	/**
-	 * Open {@code {id}.mrg} for reading. Throws {@link FileNotFoundException}
+	 * Open {@code filename} for reading. Throws {@link FileNotFoundException}
 	 * if no folder is chosen or the file isn't there.
 	 */
-	public InputStream openLevel(long id) throws IOException {
-		DocumentFile file = findLevel(id);
+	public InputStream openLevel(String filename) throws IOException {
+		DocumentFile file = findLevel(filename);
 		if (file == null || !file.exists()) {
-			throw new FileNotFoundException("Level " + id + ".mrg not in storage");
+			throw new FileNotFoundException("Level " + filename + " not in storage");
 		}
 		InputStream in = context.getContentResolver().openInputStream(file.getUri());
 		if (in == null) {
@@ -113,23 +154,22 @@ public class LevelStorage {
 	}
 
 	/**
-	 * Create {@code {id}.mrg} in the chosen folder (overwriting if present)
+	 * Create {@code filename} in the chosen folder (overwriting if present)
 	 * and return an {@link OutputStream} to write into. Caller closes it.
 	 */
-	public OutputStream createLevel(long id) throws IOException {
+	public OutputStream createLevel(String filename) throws IOException {
 		DocumentFile tree = requireTree();
-		String name = fileNameFor(id);
 
 		// Overwrite-by-delete-and-create — DocumentFile has no truncating
 		// "create or open" primitive, and concatenating onto an existing
 		// .mrg would corrupt it.
-		DocumentFile existing = tree.findFile(name);
+		DocumentFile existing = tree.findFile(filename);
 		if (existing != null) {
 			existing.delete();
 		}
-		DocumentFile created = tree.createFile(MIME_MRG, name);
+		DocumentFile created = tree.createFile(MIME_MRG, filename);
 		if (created == null) {
-			throw new IOException("Could not create " + name + " in " + tree.getUri());
+			throw new IOException("Could not create " + filename + " in " + tree.getUri());
 		}
 		OutputStream out = context.getContentResolver().openOutputStream(created.getUri());
 		if (out == null) {
@@ -138,22 +178,83 @@ public class LevelStorage {
 		return out;
 	}
 
-	/** Delete {@code {id}.mrg} if present. No-op if not. */
-	public void deleteLevel(long id) {
-		DocumentFile file = findLevel(id);
+	/** Delete {@code filename} if present. No-op if not. */
+	public void deleteLevel(String filename) {
+		if (filename == null || filename.isEmpty()) return;
+		DocumentFile file = findLevel(filename);
 		if (file != null && file.exists()) {
 			file.delete();
 		}
 	}
 
-	// --- Internals ------------------------------------------------------------
-
-	private DocumentFile findLevel(long id) {
+	/**
+	 * Rename a file in the SAF tree. Returns the actual on-disk name after
+	 * the rename — providers are allowed to disambiguate by appending
+	 * {@code (1)}, {@code (2)} etc., so we re-query rather than trusting
+	 * the requested name. Returns {@code null} if {@code oldName} doesn't
+	 * exist or the rename failed.
+	 *
+	 * <p>Used by the v1→v2 startup migration to lift legacy {@code {id}.mrg}
+	 * files to human-readable names.
+	 */
+	public String renameLevel(String oldName, String newName) {
+		if (oldName == null || newName == null || oldName.equals(newName)) return null;
 		Uri treeUri = getLocation();
 		if (treeUri == null) return null;
 		DocumentFile tree = DocumentFile.fromTreeUri(context, treeUri);
 		if (tree == null) return null;
-		return tree.findFile(fileNameFor(id));
+		DocumentFile file = tree.findFile(oldName);
+		if (file == null || !file.exists()) return null;
+		boolean ok = file.renameTo(newName);
+		if (!ok) return null;
+		// Re-query: provider may have changed the name to avoid collision.
+		String actual = file.getName();
+		return actual != null ? actual : newName;
+	}
+
+	/**
+	 * List all {@code .mrg} filenames in the chosen folder. Empty list if no
+	 * folder is set. Used by the folder rescan path.
+	 */
+	public List<String> listMrgFiles() {
+		ArrayList<String> out = new ArrayList<>();
+		Uri treeUri = getLocation();
+		if (treeUri == null) return out;
+		DocumentFile tree = DocumentFile.fromTreeUri(context, treeUri);
+		if (tree == null || !tree.exists()) return out;
+		// listFiles() can be expensive on large trees, but for a hand-curated
+		// levels folder this is fine. Filter strictly to .mrg so we don't
+		// pick up README.txt etc.
+		for (DocumentFile child : tree.listFiles()) {
+			if (child == null || child.isDirectory()) continue;
+			String name = child.getName();
+			if (Filenames.isMrgFilename(name)) {
+				out.add(name);
+			}
+		}
+		return out;
+	}
+
+	/** Direct DocumentFile lookup. Package-private for the rescan path. */
+	DocumentFile findFile(String filename) {
+		return findLevel(filename);
+	}
+
+	// --- Internals ------------------------------------------------------------
+
+	private DocumentFile findLevel(String filename) {
+		Uri treeUri = getLocation();
+		if (treeUri == null) return null;
+		DocumentFile tree = DocumentFile.fromTreeUri(context, treeUri);
+		if (tree == null) return null;
+		return tree.findFile(filename);
+	}
+
+	/** Public for callers (LevelsManager) that need direct tree access for {@link Filenames#uniqueIn}. */
+	public DocumentFile getTree() {
+		Uri treeUri = getLocation();
+		if (treeUri == null) return null;
+		return DocumentFile.fromTreeUri(context, treeUri);
 	}
 
 	private DocumentFile requireTree() throws IOException {
@@ -166,9 +267,5 @@ public class LevelStorage {
 			throw new IOException("Level storage folder no longer accessible: " + treeUri);
 		}
 		return tree;
-	}
-
-	private static String fileNameFor(long id) {
-		return id + ".mrg";
 	}
 }

@@ -29,10 +29,11 @@ public class LevelsDataSource {
 		dbHelper.close();
 	}
 
-	public synchronized Level createLevel(String name, String author, int countEasy, int countMedium, int countHard, long addedTs, long installedTs, boolean isDefault, long apiId) {
+	public synchronized Level createLevel(String name, String author, String filename, int countEasy, int countMedium, int countHard, long addedTs, long installedTs, boolean isDefault, long apiId) {
 		ContentValues values = new ContentValues();
 		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_NAME, name);
 		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_AUTHOR, author);
+		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_FILENAME, filename == null ? "" : filename);
 		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_COUNT_EASY, countEasy);
 		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_COUNT_MEDIUM, countMedium);
 		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_COUNT_HARD, countHard);
@@ -102,6 +103,35 @@ public class LevelsDataSource {
 		// logDebug("LevelsDataSource.updateLevel selectedLeague: " + level.getSelectedLeague());
 
 		db.update(LevelsSQLiteOpenHelper.TABLE_LEVELS, values, LevelsSQLiteOpenHelper.LEVELS_COLUMN_ID + " = " + level.getId(), null);
+	}
+
+	/** Set the on-disk filename for a row. Used by the v1→v2 backfill path. */
+	public synchronized void updateFilename(long id, String filename) {
+		ContentValues values = new ContentValues();
+		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_FILENAME, filename == null ? "" : filename);
+		db.update(LevelsSQLiteOpenHelper.TABLE_LEVELS, values,
+				LevelsSQLiteOpenHelper.LEVELS_COLUMN_ID + " = " + id, null);
+	}
+
+	/**
+	 * All non-empty filenames currently stored. Used by:
+	 * <ul>
+	 *   <li>{@code scanFolder()} to skip {@code .mrg} files already known to the DB</li>
+	 *   <li>{@code Filenames.uniqueIn(...)} to reserve names against in-flight inserts</li>
+	 * </ul>
+	 */
+	public synchronized java.util.Set<String> getAllFilenames() {
+		java.util.HashSet<String> out = new java.util.HashSet<>();
+		Cursor cursor = db.query(LevelsSQLiteOpenHelper.TABLE_LEVELS,
+				new String[]{LevelsSQLiteOpenHelper.LEVELS_COLUMN_FILENAME},
+				LevelsSQLiteOpenHelper.LEVELS_COLUMN_FILENAME + " <> ''",
+				null, null, null, null);
+		while (cursor.moveToNext()) {
+			String f = cursor.getString(0);
+			if (f != null && !f.isEmpty()) out.add(f);
+		}
+		cursor.close();
+		return out;
 	}
 
 	public synchronized HashMap<Long, Long> findInstalledLevels(ArrayList<Long> apiIds) {
@@ -245,6 +275,10 @@ public class LevelsDataSource {
 		level.setId(cursor.getLong(cursor.getColumnIndex(LevelsSQLiteOpenHelper.LEVELS_COLUMN_ID)));
 		level.setName(cursor.getString(cursor.getColumnIndex(LevelsSQLiteOpenHelper.LEVELS_COLUMN_NAME)));
 		level.setAuthor(cursor.getString(cursor.getColumnIndex(LevelsSQLiteOpenHelper.LEVELS_COLUMN_AUTHOR)));
+		int filenameIdx = cursor.getColumnIndex(LevelsSQLiteOpenHelper.LEVELS_COLUMN_FILENAME);
+		// Defensive: column may briefly not exist on a freshly-upgraded DB if
+		// onUpgrade hasn't run for some reason. Treat as empty in that case.
+		level.setFilename(filenameIdx >= 0 ? cursor.getString(filenameIdx) : "");
 		level.setCount(
 				cursor.getInt(cursor.getColumnIndex(LevelsSQLiteOpenHelper.LEVELS_COLUMN_COUNT_EASY)),
 				cursor.getInt(cursor.getColumnIndex(LevelsSQLiteOpenHelper.LEVELS_COLUMN_COUNT_MEDIUM)),

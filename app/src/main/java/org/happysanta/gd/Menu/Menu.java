@@ -481,6 +481,10 @@ public class Menu
 				managerScreen.addItem(createEmptyLine(true));
 				// managerScreen.addItem(new ActionMenuElement(getString(R.string.install_mrg), this));
 				managerScreen.addItem(new ActionMenuElement(getString(R.string.install_mrg), ActionMenuElement.SELECT_FILE, this));
+				managerScreen.addItem(createEmptyLine(true));
+				managerScreen.addItem(new ActionMenuElement(getString(R.string.open_levels_folder), ActionMenuElement.OPEN_LEVELS_FOLDER, this));
+				managerScreen.addItem(new ActionMenuElement(getString(R.string.change_levels_folder), ActionMenuElement.CHANGE_LEVELS_FOLDER, this));
+				managerScreen.addItem(new ActionMenuElement(getString(R.string.rescan_folder), ActionMenuElement.RESCAN_FOLDER, this));
 
 				// LevelsManager installed
 				// managerInstalledScreen.addItem(new TextMenuElement(getString(R.string.installed_levels_text)));
@@ -1179,6 +1183,18 @@ public class Menu
 					installFromFileBrowse();
 					return;
 				}
+				if (((ActionMenuElement) item).getActionValue() == ActionMenuElement.OPEN_LEVELS_FOLDER) {
+					gd.openLevelsFolder();
+					return;
+				}
+				if (((ActionMenuElement) item).getActionValue() == ActionMenuElement.CHANGE_LEVELS_FOLDER) {
+					gd.pickNewLevelsFolder(null);
+					return;
+				}
+				if (((ActionMenuElement) item).getActionValue() == ActionMenuElement.RESCAN_FOLDER) {
+					rescanLevelsFolder();
+					return;
+				}
 				if (((ActionMenuElement) item).getActionValue() == ActionMenuElement.YES) {
 					if (currentMenu == eraseScreen) {
 						getLevelsManager().clearHighScores();
@@ -1559,6 +1575,42 @@ public class Menu
 							}
 						})
 						.show();
+			}
+		});
+	}
+
+	/**
+	 * Walk the SAF folder for any {@code .mrg} files the DB doesn't know
+	 * about and adopt them. Triggered from the manager-screen entry; lets
+	 * the user copy a level pack into the chosen folder via a file manager
+	 * and have it appear in-game without a fresh install flow.
+	 *
+	 * <p>Gated on having a folder picked. The scan itself is fast for any
+	 * realistic number of files, so we run it on the UI thread and just
+	 * show an alert with the result.
+	 */
+	public void rescanLevelsFolder() {
+		final GDActivity gd = getGDActivity();
+		gd.requestLevelsFolderIfNeeded(new Runnable() {
+			@Override
+			public void run() {
+				int added = gd.levelsManager.scanFolder();
+				String msg;
+				if (added == 0) {
+					msg = getString(R.string.rescan_none);
+				} else if (added == 1) {
+					msg = getString(R.string.rescan_one);
+				} else {
+					msg = String.format(getString(R.string.rescan_many), added);
+				}
+				showAlert(getString(R.string.rescan_folder), msg, new Runnable() {
+					@Override
+					public void run() {
+						// Refresh the installed-levels list so newly-adopted
+						// rows show up immediately.
+						managerInstalledScreen.reloadLevels();
+					}
+				});
 			}
 		});
 	}

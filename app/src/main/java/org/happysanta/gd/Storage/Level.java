@@ -9,6 +9,12 @@ public class Level {
 	private long id = 0;
 	private String name;
 	private String author;
+	/**
+	 * On-disk filename in the SAF tree (e.g. {@code "Crazy Cliffs.mrg"}).
+	 * Empty for the bundled default level (id == 1, served from assets) and
+	 * for rows that haven't been migrated from schema v1 yet.
+	 */
+	private String filename = "";
 	private int[] count;
 	private int size = 0;
 	private long addedTs = 0;
@@ -72,6 +78,14 @@ public class Level {
 
 	public void setAuthor(String author) {
 		this.author = author;
+	}
+
+	public String getFilename() {
+		return filename == null ? "" : filename;
+	}
+
+	public void setFilename(String filename) {
+		this.filename = filename == null ? "" : filename;
 	}
 
 	public int getCountEasy() {
@@ -273,6 +287,7 @@ public class Level {
 		s.append("id: " + id + ", ");
 		s.append("name: \"" + name + "\", ");
 		s.append("author: \"" + author + "\", ");
+		s.append("filename: \"" + filename + "\", ");
 		s.append("count: " + count[0] + "/" + count[1] + "/" + count[2] + ", ");
 		s.append("added_ts: " + addedTs + ", ");
 		s.append("installed_ts: " + installedTs + ", ");

@@ -60,6 +60,14 @@
 	<string name="download_mods">Download mods</string>
 	<string name="download_options">Download options</string>
 	<string name="install_mrg">Install levels.mrg</string>
+	<string name="open_levels_folder">Open levels folder</string>
+	<string name="change_levels_folder">Change levels folder</string>
+	<string name="rescan_folder">Rescan folder</string>
+	<string name="rescan_none">No new levels found.</string>
+	<string name="rescan_one">Found 1 new level.</string>
+	<string name="rescan_many">Found %d new levels.</string>
+	<string name="no_file_manager">No app available to open this folder.</string>
+	<string name="no_levels_folder">No levels folder picked yet — pick one first.</string>
 	<string name="installed_levels_text">Here you can manage installed levels.</string>
 	<string name="download_levels_text">Here you can download and install new levels.</string>
 

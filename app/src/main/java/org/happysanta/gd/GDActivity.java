@@ -115,6 +115,13 @@ public class GDActivity extends Activity implements Runnable {
 	private static final int RC_PICK_MRG_FILE = 0x6FD2;
 	private MrgFilePickedCallback pendingMrgFileCallback;
 
+	// "View levels folder" fallback — see openLevelsFolder(). When no app on
+	// the device handles ACTION_VIEW on a directory document URI, we re-fire
+	// the SAF tree picker scoped to the existing folder via EXTRA_INITIAL_URI
+	// so the user can at least browse the contents. Result is intentionally
+	// ignored — this is a viewer, not a folder-change action.
+	private static final int RC_VIEW_LEVELS_FOLDER = 0x6FD3;
+
 	/** Callback fired when the user picks a {@code .mrg} via the system picker. */
 	public interface MrgFilePickedCallback {
 		/**
@@ -785,6 +792,65 @@ public class GDActivity extends Activity implements Runnable {
 	}
 
 	/**
+	 * Force the SAF folder picker even if one is already chosen — for the
+	 * "Change levels folder" menu entry. The new URI replaces the old one
+	 * via {@link LevelStorage#setLocation(Uri)} (which also releases the
+	 * prior permission). Existing {@code {id}.mrg} files in the old folder
+	 * stay where they are; the user is responsible for moving them if they
+	 * want them in the new location. {@code onReady} runs only on success.
+	 */
+	public void pickNewLevelsFolder(Runnable onReady) {
+		pendingFolderPickedCallback = onReady;
+		startActivityForResult(LevelStorage.createPickerIntent(), RC_PICK_LEVELS_FOLDER);
+	}
+
+	/**
+	 * Try to open the chosen levels folder in a file-manager-like app.
+	 * Shows a friendly alert if no folder is set yet. If no app on this
+	 * device handles directory {@code ACTION_VIEW} (stock AOSP doesn't
+	 * ship a directory viewer), falls back to firing the SAF tree picker
+	 * scoped to the existing folder via {@code EXTRA_INITIAL_URI} — the
+	 * picker isn't a viewer, but it's part of the system (always present
+	 * on API 21+) and shows the folder contents. The user can browse and
+	 * back out; we ignore any folder they pick (this entry is a viewer,
+	 * not a re-pick action).
+	 */
+	public void openLevelsFolder() {
+		LevelStorage storage = levelsManager.getStorage();
+		Intent viewIntent = storage.createViewFolderIntent();
+		if (viewIntent == null) {
+			new AlertDialog.Builder(this)
+					.setMessage(getString(R.string.no_levels_folder))
+					.setPositiveButton(android.R.string.ok, null)
+					.show();
+			return;
+		}
+		try {
+			startActivity(viewIntent);
+			return;
+		} catch (android.content.ActivityNotFoundException e) {
+			// Fall through to SAF picker fallback below.
+		}
+
+		Intent fallback = LevelStorage.createPickerIntent();
+		// EXTRA_INITIAL_URI is honored on API 26+; harmless on older. It scopes
+		// the picker to the existing folder so the user lands on the contents.
+		if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+			fallback.putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI, storage.getLocation());
+		}
+		try {
+			startActivityForResult(fallback, RC_VIEW_LEVELS_FOLDER);
+		} catch (android.content.ActivityNotFoundException e) {
+			// Genuinely impossible on a real Android device (the SAF picker
+			// is part of system DocumentsUI), but be defensive.
+			new AlertDialog.Builder(this)
+					.setMessage(getString(R.string.no_file_manager))
+					.setPositiveButton(android.R.string.ok, null)
+					.show();
+		}
+	}
+
+	/**
 	 * Launch the SAF single-file picker so the user can choose a {@code .mrg}
 	 * from anywhere on the device. The picker hands back a {@code content://}
 	 * URI; we copy its bytes into a cache-dir temp file and pass that to the
@@ -817,6 +883,13 @@ public class GDActivity extends Activity implements Runnable {
 			}
 			levelsManager.getStorage().setLocation(data.getData());
 			if (callback != null) callback.run();
+			return;
+		}
+
+		if (requestCode == RC_VIEW_LEVELS_FOLDER) {
+			// View-only fallback — ignore whatever the user picked. We don't
+			// want to silently change the levels folder when they only asked
+			// to look at it. "Change levels folder" is a separate menu entry.
 			return;
 		}
 

@@ -357,7 +357,18 @@ public class LevelsMenuScreen extends MenuScreen {
 	}
 
 	protected void scrollToItem(int index) {
-		LevelMenuElement el = (LevelMenuElement) elements.elementAt(index);
+		// Bounds-check: this is called from a deferred preDraw listener
+		// scheduled in AsyncAddElements.onPostExecute. If clearList() runs
+		// between the schedule and the firing — e.g. reloadLevels() kicked
+		// off elsewhere while the listener is still pending — elements is
+		// empty by the time we get here. selectedIndex hasn't been reset
+		// (it's only cleared on screen rebuild), so we'd otherwise throw
+		// ArrayIndexOutOfBoundsException("0 >= 0"). Just no-op; the next
+		// load will re-highlight from scratch.
+		if (index < 0 || index >= elements.size()) return;
+		Object raw = elements.elementAt(index);
+		if (!(raw instanceof LevelMenuElement)) return;
+		LevelMenuElement el = (LevelMenuElement) raw;
 		// logDebug(el);
 		scrollToItem(el);
 	}

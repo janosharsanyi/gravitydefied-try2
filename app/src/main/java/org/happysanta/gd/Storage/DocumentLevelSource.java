@@ -4,22 +4,22 @@ import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * {@link LevelSource} backed by a downloaded {@code {id}.mrg} living in the
- * user-chosen SAF tree. Delegates to {@link LevelStorage#openLevel(long)}
- * so the URI / DocumentFile lookup stays in one place.
+ * {@link LevelSource} backed by a {@code .mrg} living in the user-chosen SAF
+ * tree. Delegates to {@link LevelStorage#openLevel(String)} so the URI /
+ * DocumentFile lookup stays in one place.
  */
 public class DocumentLevelSource implements LevelSource {
 
 	private final LevelStorage storage;
-	private final long levelId;
+	private final String filename;
 
-	public DocumentLevelSource(LevelStorage storage, long levelId) {
+	public DocumentLevelSource(LevelStorage storage, String filename) {
 		this.storage = storage;
-		this.levelId = levelId;
+		this.filename = filename;
 	}
 
 	@Override
 	public InputStream open() throws IOException {
-		return storage.openLevel(levelId);
+		return storage.openLevel(filename);
 	}
 }

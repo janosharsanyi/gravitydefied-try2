@@ -6,7 +6,9 @@ import android.database.sqlite.SQLiteOpenHelper;
 
 public class LevelsSQLiteOpenHelper extends SQLiteOpenHelper {
 
-	private static final int DATABASE_VERSION = 1;
+	// v1 → v2 (2026-05): added LEVELS_COLUMN_FILENAME so DB rows can point at
+	// human-readable {basename}.mrg files in the SAF tree instead of {id}.mrg.
+	private static final int DATABASE_VERSION = 2;
 	private static final String DATABASE_NAME = "levels.db";
 
 	public static final String TABLE_LEVELS = "levels";
@@ -15,6 +17,14 @@ public class LevelsSQLiteOpenHelper extends SQLiteOpenHelper {
 	public static final String LEVELS_COLUMN_ID = "_id";
 	public static final String LEVELS_COLUMN_NAME = "name";
 	public static final String LEVELS_COLUMN_AUTHOR = "author";
+	/**
+	 * On-disk filename within the user's SAF tree (e.g. {@code "Crazy Cliffs.mrg"}).
+	 * Empty for the bundled default level (id == 1, served from assets) and
+	 * also empty on rows migrated up from schema v1 — {@link LevelsManager}
+	 * fills those in on startup by sanitizing {@link #LEVELS_COLUMN_NAME} and
+	 * renaming the legacy {@code {id}.mrg} file in place.
+	 */
+	public static final String LEVELS_COLUMN_FILENAME = "filename";
 	public static final String LEVELS_COLUMN_COUNT_EASY = "count_easy";
 	public static final String LEVELS_COLUMN_COUNT_MEDIUM = "count_medium";
 	public static final String LEVELS_COLUMN_COUNT_HARD = "count_hard";
@@ -41,6 +51,7 @@ public class LevelsSQLiteOpenHelper extends SQLiteOpenHelper {
 			+ LEVELS_COLUMN_ID + " INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
 			+ LEVELS_COLUMN_NAME + " TEXT NOT NULL, "
 			+ LEVELS_COLUMN_AUTHOR + " TEXT NOT NULL, "
+			+ LEVELS_COLUMN_FILENAME + " TEXT NOT NULL DEFAULT '', "
 			+ LEVELS_COLUMN_COUNT_EASY + " INTEGER NOT NULL, "
 			+ LEVELS_COLUMN_COUNT_MEDIUM + " INTEGER NOT NULL, "
 			+ LEVELS_COLUMN_COUNT_HARD + " INTEGER NOT NULL, "
@@ -114,7 +125,17 @@ public class LevelsSQLiteOpenHelper extends SQLiteOpenHelper {
 
 	@Override
 	public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-
+		if (oldVersion < 2) {
+			// Add the filename column. Default to empty so migration code in
+			// LevelsManager can spot v1 rows ("filename == ''") and backfill
+			// them by sanitizing the row's name + renaming the legacy
+			// {id}.mrg in the user's SAF folder. We don't do the rename here
+			// because we don't have access to LevelStorage / Context resolver
+			// at this layer.
+			db.execSQL("ALTER TABLE " + TABLE_LEVELS
+					+ " ADD COLUMN " + LEVELS_COLUMN_FILENAME
+					+ " TEXT NOT NULL DEFAULT ''");
+		}
 	}
 
 	private void createLevelsIndexes(SQLiteDatabase db) {
