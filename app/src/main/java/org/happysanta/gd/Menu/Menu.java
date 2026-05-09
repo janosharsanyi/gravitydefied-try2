@@ -1594,14 +1594,15 @@ public class Menu
 		gd.requestLevelsFolderIfNeeded(new Runnable() {
 			@Override
 			public void run() {
-				int added = gd.levelsManager.scanFolder();
+				final org.happysanta.gd.Storage.LevelsManager.ScanResult result =
+						gd.levelsManager.scanFolder();
 				String msg;
-				if (added == 0) {
+				if (result.added == 0) {
 					msg = getString(R.string.rescan_none);
-				} else if (added == 1) {
+				} else if (result.added == 1) {
 					msg = getString(R.string.rescan_one);
 				} else {
-					msg = String.format(getString(R.string.rescan_many), added);
+					msg = String.format(getString(R.string.rescan_many), result.added);
 				}
 				showAlert(getString(R.string.rescan_folder), msg, new Runnable() {
 					@Override
@@ -1609,10 +1610,60 @@ public class Menu
 						// Refresh the installed-levels list so newly-adopted
 						// rows show up immediately.
 						managerInstalledScreen.reloadLevels();
+						// Then, if any existing files have content-shifted
+						// out from under us, ask the user what to do. We
+						// stack this *after* the "found N new" alert so the
+						// two questions don't blur into each other.
+						if (!result.changed.isEmpty()) {
+							promptReplaceChanged(result.changed);
+						}
 					}
 				});
 			}
 		});
+	}
+
+	/**
+	 * Show a single Replace/Skip dialog listing all rows whose on-disk file
+	 * has been swapped for different content since we last hashed it. v1
+	 * intentionally treats it as all-or-nothing — per-file choice would mean
+	 * a dialog per row, which is annoying when (e.g.) the user batch-updated
+	 * their whole levels folder. If they want finer control they can rename
+	 * files first.
+	 */
+	private void promptReplaceChanged(final java.util.List<org.happysanta.gd.Storage.LevelsManager.ChangedLevel> changed) {
+		final GDActivity gd = getGDActivity();
+		StringBuilder list = new StringBuilder();
+		for (int i = 0; i < changed.size(); i++) {
+			if (i > 0) list.append('\n');
+			list.append("• ").append(changed.get(i).level.getName());
+		}
+		String msg = String.format(getString(R.string.changed_files_message), list.toString());
+		// Positive button = the safe, non-destructive choice (Keep progress).
+		// Material convention: the default button shouldn't wipe user data.
+		// Both options bump the stored hash so we don't re-flag the same
+		// files on the next rescan / launch — the difference is whether
+		// scores and unlocks survive.
+		new android.app.AlertDialog.Builder(gd)
+				.setTitle(getString(R.string.changed_files_title))
+				.setMessage(msg)
+				.setPositiveButton(getString(R.string.keep_progress),
+						new DialogInterface.OnClickListener() {
+							@Override
+							public void onClick(DialogInterface dialog, int which) {
+								gd.levelsManager.acknowledgeChanged(changed);
+								managerInstalledScreen.reloadLevels();
+							}
+						})
+				.setNegativeButton(getString(R.string.reset_progress),
+						new DialogInterface.OnClickListener() {
+							@Override
+							public void onClick(DialogInterface dialog, int which) {
+								gd.levelsManager.applyChanged(changed);
+								managerInstalledScreen.reloadLevels();
+							}
+						})
+				.show();
 	}
 
 	public static boolean isNameCheat(byte[] chars) {

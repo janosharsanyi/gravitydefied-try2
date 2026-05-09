@@ -8,7 +8,11 @@ public class LevelsSQLiteOpenHelper extends SQLiteOpenHelper {
 
 	// v1 → v2 (2026-05): added LEVELS_COLUMN_FILENAME so DB rows can point at
 	// human-readable {basename}.mrg files in the SAF tree instead of {id}.mrg.
-	private static final int DATABASE_VERSION = 2;
+	// v2 → v3 (2026-05): added LEVELS_COLUMN_HASH (SHA-256 of file contents)
+	// so rescan can detect when a same-named file has been swapped for a
+	// different one — used to prompt the user before re-binding scores/unlocks
+	// to what's actually a different level pack.
+	private static final int DATABASE_VERSION = 3;
 	private static final String DATABASE_NAME = "levels.db";
 
 	public static final String TABLE_LEVELS = "levels";
@@ -25,6 +29,19 @@ public class LevelsSQLiteOpenHelper extends SQLiteOpenHelper {
 	 * renaming the legacy {@code {id}.mrg} file in place.
 	 */
 	public static final String LEVELS_COLUMN_FILENAME = "filename";
+	/**
+	 * Lowercase hex SHA-256 of the {@code .mrg} file contents at install /
+	 * adoption time. Empty for the bundled default level (id == 1) and for
+	 * rows migrated up from schema v2 where we haven't seen the file yet
+	 * (the next rescan backfills it).
+	 *
+	 * <p>Used by the rescan path to detect "same filename, different content"
+	 * — i.e. the user swapped {@code Crazy Cliffs.mrg} for a totally
+	 * different level pack with the same name. Without this we'd silently
+	 * keep the old row's name/scores/unlocks bound to the new file, which is
+	 * a confusing identity bug.
+	 */
+	public static final String LEVELS_COLUMN_HASH = "hash";
 	public static final String LEVELS_COLUMN_COUNT_EASY = "count_easy";
 	public static final String LEVELS_COLUMN_COUNT_MEDIUM = "count_medium";
 	public static final String LEVELS_COLUMN_COUNT_HARD = "count_hard";
@@ -52,6 +69,7 @@ public class LevelsSQLiteOpenHelper extends SQLiteOpenHelper {
 			+ LEVELS_COLUMN_NAME + " TEXT NOT NULL, "
 			+ LEVELS_COLUMN_AUTHOR + " TEXT NOT NULL, "
 			+ LEVELS_COLUMN_FILENAME + " TEXT NOT NULL DEFAULT '', "
+			+ LEVELS_COLUMN_HASH + " TEXT NOT NULL DEFAULT '', "
 			+ LEVELS_COLUMN_COUNT_EASY + " INTEGER NOT NULL, "
 			+ LEVELS_COLUMN_COUNT_MEDIUM + " INTEGER NOT NULL, "
 			+ LEVELS_COLUMN_COUNT_HARD + " INTEGER NOT NULL, "
@@ -134,6 +152,14 @@ public class LevelsSQLiteOpenHelper extends SQLiteOpenHelper {
 			// at this layer.
 			db.execSQL("ALTER TABLE " + TABLE_LEVELS
 					+ " ADD COLUMN " + LEVELS_COLUMN_FILENAME
+					+ " TEXT NOT NULL DEFAULT ''");
+		}
+		if (oldVersion < 3) {
+			// Add the hash column. Default empty; the next rescan will
+			// backfill it for any row whose file is reachable, treating
+			// "no stored hash" as "first sighting, accept whatever's there".
+			db.execSQL("ALTER TABLE " + TABLE_LEVELS
+					+ " ADD COLUMN " + LEVELS_COLUMN_HASH
 					+ " TEXT NOT NULL DEFAULT ''");
 		}
 	}

@@ -66,6 +66,11 @@
 	<string name="rescan_none">No new levels found.</string>
 	<string name="rescan_one">Found 1 new level.</string>
 	<string name="rescan_many">Found %d new levels.</string>
+	<string name="changed_files_title">File contents changed</string>
+	<string name="changed_files_message">The following levels have been replaced on disk with different contents:\n\n%1$s\n\nKeep progress: leaves your scores and unlocks intact, but they\'ll apply to whatever tracks the new file contains.\n\nReset progress: refreshes metadata and clears scores and unlocks (the old data was tied to a different track layout).</string>
+	<string name="changed_file_load_message">"%1$s" has been replaced on disk with different contents since you last played it.\n\nKeep progress: load with your existing scores and unlocks (they\'ll apply to whatever tracks the new file contains).\n\nReset progress: refresh metadata and clear scores and unlocks, then load.</string>
+	<string name="reset_progress">Reset progress</string>
+	<string name="keep_progress">Keep progress</string>
 	<string name="no_file_manager">No app available to open this folder.</string>
 	<string name="no_levels_folder">No levels folder picked yet — pick one first.</string>
 	<string name="installed_levels_text">Here you can manage installed levels.</string>
@@ -234,6 +239,10 @@
 	<string name="downloading">Downloading..</string>
 	<string name="delete_levels">Delete levels</string>
 	<string name="delete_levels_confirmation">Are you sure you want to delete these levels? This action cannot be undone.</string>
+	<string name="missing_suffix"> (missing)</string>
+	<string name="missing_file">File missing</string>
+	<string name="remove_from_list">Remove from list</string>
+	<string name="remove_missing_confirmation">The file for this level is no longer in the levels folder. Remove it from the list? High scores for this level will also be deleted.</string>
 	<string name="active">Active</string>
 	<string name="unlock_next">Unlock next level</string>
 

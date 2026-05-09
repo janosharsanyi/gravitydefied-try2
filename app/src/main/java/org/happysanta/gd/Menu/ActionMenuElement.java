@@ -45,6 +45,7 @@ public class ActionMenuElement
 	public static final int OPEN_LEVELS_FOLDER = 16;
 	public static final int CHANGE_LEVELS_FOLDER = 17;
 	public static final int RESCAN_FOLDER = 18;
+	public static final int REMOVE_FROM_LIST = 19;
 
 	protected MenuHandler handler;
 	protected boolean isLocked = false;

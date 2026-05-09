@@ -29,11 +29,12 @@ public class LevelsDataSource {
 		dbHelper.close();
 	}
 
-	public synchronized Level createLevel(String name, String author, String filename, int countEasy, int countMedium, int countHard, long addedTs, long installedTs, boolean isDefault, long apiId) {
+	public synchronized Level createLevel(String name, String author, String filename, String hash, int countEasy, int countMedium, int countHard, long addedTs, long installedTs, boolean isDefault, long apiId) {
 		ContentValues values = new ContentValues();
 		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_NAME, name);
 		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_AUTHOR, author);
 		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_FILENAME, filename == null ? "" : filename);
+		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_HASH, hash == null ? "" : hash);
 		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_COUNT_EASY, countEasy);
 		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_COUNT_MEDIUM, countMedium);
 		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_COUNT_HARD, countHard);
@@ -111,6 +112,79 @@ public class LevelsDataSource {
 		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_FILENAME, filename == null ? "" : filename);
 		db.update(LevelsSQLiteOpenHelper.TABLE_LEVELS, values,
 				LevelsSQLiteOpenHelper.LEVELS_COLUMN_ID + " = " + id, null);
+	}
+
+	/**
+	 * Set the content hash for a row. Used by the rescan path to backfill a
+	 * v2-era empty hash without disturbing scores or unlocks.
+	 */
+	public synchronized void updateHash(long id, String hash) {
+		ContentValues values = new ContentValues();
+		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_HASH, hash == null ? "" : hash);
+		db.update(LevelsSQLiteOpenHelper.TABLE_LEVELS, values,
+				LevelsSQLiteOpenHelper.LEVELS_COLUMN_ID + " = " + id, null);
+	}
+
+	/**
+	 * Acknowledge new file contents under an existing filename without
+	 * wiping the user's progress: refresh the cached header (counts +
+	 * install timestamp) and bump the stored hash so we stop asking, but
+	 * keep highscores rows and unlock bitmasks intact.
+	 *
+	 * <p>Used when the user picks "Keep progress" on a content-change
+	 * prompt — they explicitly opted into letting their old times/unlocks
+	 * apply to whatever the new file's tracks are.
+	 */
+	public synchronized void acknowledgeContent(long id, String hash,
+			int countEasy, int countMedium, int countHard, long installedTs) {
+		ContentValues values = new ContentValues();
+		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_HASH, hash == null ? "" : hash);
+		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_COUNT_EASY, countEasy);
+		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_COUNT_MEDIUM, countMedium);
+		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_COUNT_HARD, countHard);
+		values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_INSTALLED, installedTs);
+		db.update(LevelsSQLiteOpenHelper.TABLE_LEVELS, values,
+				LevelsSQLiteOpenHelper.LEVELS_COLUMN_ID + " = " + id, null);
+	}
+
+	/**
+	 * Re-bind a row to new file contents under the same filename. Refreshes
+	 * the cached header info (counts, hash) and the install timestamp, then
+	 * wipes any saved state that was tied to the old level's track layout:
+	 * highscores rows for this {@code level_id}, plus the unlock bitmasks.
+	 *
+	 * <p>Done in a transaction because partial application would leave the
+	 * row referring to new tracks but with stale unlocks/scores — which is
+	 * exactly the bug we're trying to prevent.
+	 */
+	public synchronized void replaceLevelContent(long id, String hash,
+			int countEasy, int countMedium, int countHard, long installedTs) {
+		db.beginTransaction();
+		try {
+			ContentValues values = new ContentValues();
+			values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_HASH, hash == null ? "" : hash);
+			values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_COUNT_EASY, countEasy);
+			values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_COUNT_MEDIUM, countMedium);
+			values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_COUNT_HARD, countHard);
+			values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_INSTALLED, installedTs);
+			values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_UNLOCKED_EASY, 0);
+			values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_UNLOCKED_MEDIUM, 0);
+			values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_UNLOCKED_HARD, 0);
+			values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_UNLOCKED_LEVELS, 0);
+			values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_UNLOCKED_LEAGUES, 0);
+			values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_SELECTED_LEVEL, 0);
+			values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_SELECTED_TRACK, 0);
+			values.put(LevelsSQLiteOpenHelper.LEVELS_COLUMN_SELECTED_LEAGUE, 0);
+			db.update(LevelsSQLiteOpenHelper.TABLE_LEVELS, values,
+					LevelsSQLiteOpenHelper.LEVELS_COLUMN_ID + " = " + id, null);
+
+			db.delete(LevelsSQLiteOpenHelper.TABLE_HIGHSCORES,
+					LevelsSQLiteOpenHelper.HIGHSCORES_COLUMN_LEVEL_ID + " = " + id, null);
+
+			db.setTransactionSuccessful();
+		} finally {
+			db.endTransaction();
+		}
 	}
 
 	/**
@@ -279,6 +353,8 @@ public class LevelsDataSource {
 		// Defensive: column may briefly not exist on a freshly-upgraded DB if
 		// onUpgrade hasn't run for some reason. Treat as empty in that case.
 		level.setFilename(filenameIdx >= 0 ? cursor.getString(filenameIdx) : "");
+		int hashIdx = cursor.getColumnIndex(LevelsSQLiteOpenHelper.LEVELS_COLUMN_HASH);
+		level.setHash(hashIdx >= 0 ? cursor.getString(hashIdx) : "");
 		level.setCount(
 				cursor.getInt(cursor.getColumnIndex(LevelsSQLiteOpenHelper.LEVELS_COLUMN_COUNT_EASY)),
 				cursor.getInt(cursor.getColumnIndex(LevelsSQLiteOpenHelper.LEVELS_COLUMN_COUNT_MEDIUM)),

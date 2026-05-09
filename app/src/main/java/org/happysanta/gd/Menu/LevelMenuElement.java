@@ -50,7 +50,13 @@ public class LevelMenuElement
 	protected MenuImageView activeIcon = null;
 	protected boolean installed = false;
 	protected boolean active = false;
+	protected boolean missing = false;
 	protected boolean showDate = true;
+
+	/** Color for the name text when the on-disk file is gone. Matches the
+	 * disabled-action grey so it reads as "this exists but you can't act on
+	 * it normally" rather than as an error. */
+	protected static final int MISSING_COLOR = 0xff999999;
 
 	public LevelMenuElement() {
 	}
@@ -101,6 +107,12 @@ public class LevelMenuElement
 
 	public void updateNameLine() {
 		String name = level.getName() + (Global.DEBUG ? " (id" + level.getAnyId() + ")" : "");
+		if (missing) {
+			// Visual signal that the on-disk file vanished: " (missing)"
+			// suffix + dim grey. Reads as "informational, not actionable"
+			// without needing a separate icon column.
+			name = name + getString(R.string.missing_suffix);
+		}
 		// if (!active) {
 		int margin = 0;
 		if (installed)
@@ -111,6 +123,14 @@ public class LevelMenuElement
 		SpannableString ss = new SpannableString(name);
 		ss.setSpan(new LevelNameLeadingMarginSpan2(1, installed || active ? getDp(margin) : 0), 0, ss.length(), 0);
 		textView.setTextOnUiThread(ss);
+		// Dim the row when missing. When *not* missing we restore the normal
+		// state-list color so toggling missing→present (e.g. user puts the
+		// file back, hits Rescan) recovers the highlight behavior.
+		if (missing) {
+			textView.setTextColor(MISSING_COLOR);
+		} else {
+			textView.setTextColor(getGDActivity().getResources().getColorStateList(R.drawable.menu_item_color));
+		}
 		/*} else {
 			textView.setTextOnUiThread(Html.fromHtml(String.format(getString(R.string.active_name_tpl), name)));
 		}*/
@@ -202,6 +222,15 @@ public class LevelMenuElement
 		updateNameLine();
 	}
 
+	public void setMissing(boolean missing) {
+		this.missing = missing;
+		updateNameLine();
+	}
+
+	public boolean isMissing() {
+		return missing;
+	}
+
 	public void setShowDate(boolean showDate) {
 		this.showDate = showDate;
 		updateLevelsLine();
@@ -236,7 +265,18 @@ public class LevelMenuElement
 		screen.addItem(new BigTextMenuElement(Html.fromHtml(String.format(getString(R.string.tracks_tpl), level.getCountEasy() + " / " + level.getCountMedium() + " / " + level.getCountHard()))));
 		screen.addItem(menu.createEmptyLine(true));
 
-		if (!level.isInstalled()) {
+		if (missing) {
+			// File on disk vanished. Replace the normal Install/Active/Load/
+			// Delete actions with a disabled "File missing" status row plus a
+			// "Remove from list" action so the user can clear the dead row.
+			ActionMenuElement missingStatus = new ActionMenuElement(getString(R.string.missing_file), null);
+			missingStatus.setDisabled(true);
+			screen.addItem(missingStatus);
+
+			ActionMenuElement removeAction = new ActionMenuElement(
+					getString(R.string.remove_from_list), ActionMenuElement.REMOVE_FROM_LIST, this);
+			screen.addItem(removeAction);
+		} else if (!level.isInstalled()) {
 			ActionMenuElement installAction = menu.createAction(ActionMenuElement.INSTALL);
 			installAction.setText(String.format(
 					getString(R.string.install_kb), level.getSizeKb()
@@ -357,6 +397,41 @@ public class LevelMenuElement
 				case ActionMenuElement.LOAD:
 					gd.levelsManager.load(level);
 					// buildScreen();
+					break;
+
+				case ActionMenuElement.REMOVE_FROM_LIST:
+					// Mirrors the DELETE flow but skips the "must be installed"
+					// guard (a missing-file row should always be removable) and
+					// uses the missing-specific confirmation copy. The
+					// underlying LevelsManager.delete() is already tolerant of a
+					// vanished on-disk file, so no storage-layer special case
+					// is needed.
+					showConfirm(
+							getString(R.string.remove_from_list),
+							getString(R.string.remove_missing_confirmation),
+							new Runnable() {
+								@Override
+								public void run() {
+									gd.levelsManager.deleteAsync(level, new Runnable() {
+										@Override
+										public void run() {
+											long id = level.getId();
+
+											MenuScreen target = menu.getCurrentMenu().getNavTarget();
+											if (target instanceof InstalledLevelsMenuScreen) {
+												InstalledLevelsMenuScreen installedScreen = (InstalledLevelsMenuScreen) target;
+												LevelMenuElement el = installedScreen.getElementByLevelId(id, 0);
+												if (el != null)
+													installedScreen.deleteElement(el);
+												level.setId(0);
+												menu.back();
+											}
+										}
+									});
+								}
+							},
+							null
+					);
 					break;
 			}
 		}

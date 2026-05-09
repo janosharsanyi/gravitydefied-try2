@@ -271,7 +271,12 @@ public class LevelsMenuScreen extends MenuScreen {
 	}
 
 	public LevelMenuElement getElementByLevelId(long id, long apiId) {
+		// instanceof guard: showError() puts a TextMenuElement (errorText)
+		// into elements, so a blind cast would CCE if a flaky-network error
+		// was shown earlier and an install/delete callback later searches
+		// this screen.
 		for (Object _el : elements) {
+			if (!(_el instanceof LevelMenuElement)) continue;
 			LevelMenuElement el = (LevelMenuElement) _el;
 
 			if ((id > 0 && el.level.getId() == id) || apiId > 0 && el.level.getApiId() == apiId)
@@ -380,6 +385,10 @@ public class LevelsMenuScreen extends MenuScreen {
 			Level[] _levels = params[0];
 			boolean checkInstalled = getThis() instanceof DownloadLevelsMenuScreen;
 			boolean checkActive = getThis() instanceof InstalledLevelsMenuScreen;
+			// On the installed-levels screen, also flag rows whose on-disk
+			// file is gone (user deleted the .mrg from a file manager).
+			// Skipped on the download screen — those rows aren't installed.
+			boolean checkMissing = checkActive;
 
 			ArrayList<Long> ids;
 			HashMap<Long, Long> installed = null;
@@ -416,6 +425,17 @@ public class LevelsMenuScreen extends MenuScreen {
 				if (checkActive && level.getId() == levelsManager.getCurrentId()) {
 					el.setActive(true);
 					toHl = true;
+				}
+				if (checkMissing && !level.isDefault()) {
+					String filename = level.getFilename();
+					// Empty filename can mean the v1→v2 migration ran but
+					// the legacy {id}.mrg wasn't reachable at the time
+					// (folder unmounted). Treat that as missing too.
+					boolean present = filename != null && !filename.isEmpty()
+							&& levelsManager.getStorage().hasLevel(filename);
+					if (!present) {
+						el.setMissing(true);
+					}
 				}
 
 				if (!isCancelled()) {

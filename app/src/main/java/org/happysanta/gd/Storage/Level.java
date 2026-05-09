@@ -15,6 +15,13 @@ public class Level {
 	 * for rows that haven't been migrated from schema v1 yet.
 	 */
 	private String filename = "";
+	/**
+	 * Lowercase hex SHA-256 of the on-disk file at adoption time. Empty for
+	 * the bundled level (no file) and for v2-and-earlier rows that haven't
+	 * been seen by a rescan since the v3 upgrade. See
+	 * {@link LevelsSQLiteOpenHelper#LEVELS_COLUMN_HASH} for the why.
+	 */
+	private String hash = "";
 	private int[] count;
 	private int size = 0;
 	private long addedTs = 0;
@@ -86,6 +93,14 @@ public class Level {
 
 	public void setFilename(String filename) {
 		this.filename = filename == null ? "" : filename;
+	}
+
+	public String getHash() {
+		return hash == null ? "" : hash;
+	}
+
+	public void setHash(String hash) {
+		this.hash = hash == null ? "" : hash;
 	}
 
 	public int getCountEasy() {
@@ -288,6 +303,7 @@ public class Level {
 		s.append("name: \"" + name + "\", ");
 		s.append("author: \"" + author + "\", ");
 		s.append("filename: \"" + filename + "\", ");
+		s.append("hash: \"" + (hash == null ? "" : (hash.length() > 8 ? hash.substring(0, 8) + "..." : hash)) + "\", ");
 		s.append("count: " + count[0] + "/" + count[1] + "/" + count[2] + ", ");
 		s.append("added_ts: " + addedTs + ", ");
 		s.append("installed_ts: " + installedTs + ", ");

@@ -44,6 +44,21 @@ public class LevelsManager {
 	private LevelStorage storage;
 	private boolean dbOK = false;
 	private Level currentLevel;
+	/**
+	 * Captured during {@link #LevelsManager() construction} when the
+	 * active level's on-disk file no longer matches its stored hash —
+	 * i.e. the user swapped the file out while the app was off. We can't
+	 * show a dialog from the constructor (background thread, no window
+	 * yet), so we hold onto the change and let the activity surface it
+	 * via {@link #promptPendingLoadChange()} once the menu is up.
+	 */
+	private ChangedLevel pendingLoadChange = null;
+	/**
+	 * Re-entrancy guard for {@link #checkActiveLevelOnResume()}: onResume can
+	 * fire several times in a row (e.g. dialog dismiss, picker return), and
+	 * we don't want to spawn parallel hash threads or stack two prompts.
+	 */
+	private volatile boolean resumeCheckInFlight = false;
 
 	public LevelsManager() {
 		GDActivity gd = getGDActivity();
@@ -54,9 +69,10 @@ public class LevelsManager {
 			dataSource.open();
 
 			if (!dataSource.isDefaultLevelCreated()) {
-				// Default (built-in) level — filename stays empty because
-				// we read it from assets, not the SAF tree.
-				Level level = dataSource.createLevel("GDTR original", "Codebrew Software", "", 10, 10, 10, 0, 0, true, 1);
+				// Default (built-in) level — filename and hash stay empty
+				// because we read it from assets, not the SAF tree, and the
+				// file never changes out from under us.
+				Level level = dataSource.createLevel("GDTR original", "Codebrew Software", "", "", 10, 10, 10, 0, 0, true, 1);
 				logDebug("LevelsManager: Default level created!");
 				logDebug(level);
 			}
@@ -87,7 +103,205 @@ public class LevelsManager {
 		}
 
 		reload();
+
+		// Launch-time hash check on the active level. If the user swapped
+		// the file out between sessions we want to ask before letting any
+		// new game time accrue against the old row's scores/unlocks. Same
+		// skip rules as load(): default level has no file, empty stored
+		// hash means "no baseline to compare to". Errors are non-fatal —
+		// the loader path will surface them if the file is unreadable.
+		if (currentLevel != null
+				&& currentLevel.getId() != 1
+				&& currentLevel.getFilename() != null && !currentLevel.getFilename().isEmpty()
+				&& currentLevel.getHash() != null && !currentLevel.getHash().isEmpty()) {
+			try {
+				Fingerprint fp = fingerprint(currentLevel.getFilename());
+				if (!currentLevel.getHash().equals(fp.hash)) {
+					pendingLoadChange = new ChangedLevel(currentLevel, fp.hash,
+							fp.header.getCount(0), fp.header.getCount(1), fp.header.getCount(2));
+					logDebug("LevelsManager: active level " + currentLevel.getId()
+							+ " has changed on disk — pending dialog");
+				}
+			} catch (Throwable t) {
+				logDebug("LevelsManager: launch hash check failed: " + t);
+			}
+		}
+
 		dbOK = true;
+	}
+
+	/**
+	 * If the launch-time hash check flagged the active level's file as
+	 * swapped, surface the Keep/Reset dialog and <b>block the calling
+	 * thread</b> until the user decides and the resulting DB writes are
+	 * applied. Must be called from a non-UI thread (we post the dialog to
+	 * the main looper and {@link java.util.concurrent.CountDownLatch#await()}
+	 * here).
+	 *
+	 * <p>Why blocking: this has to run between {@code new LevelsManager()}
+	 * and {@code new Loader(...)} / menu construction in the activity's
+	 * background init thread. If we let init proceed and then post the
+	 * dialog after the menu is up, the menu will already have been built
+	 * from stale {@code currentLevel} counts/unlocks — the Reset wipe (or
+	 * Keep's count refresh) would land too late to be reflected without
+	 * a manual refresh.
+	 */
+	public void resolvePendingLoadChangeBlocking() {
+		final ChangedLevel change = pendingLoadChange;
+		if (change == null) return;
+		pendingLoadChange = null;
+
+		final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+		// Single-element array so the dialog callbacks (anonymous inner
+		// classes) can mutate it. Default = Keep, so any unexpected dismiss
+		// path errs on the side of preserving the user's progress.
+		final boolean[] reset = { false };
+
+		getGDActivity().runOnUiThread(new Runnable() {
+			@Override
+			public void run() {
+				String msg = String.format(getString(R.string.changed_file_load_message),
+						change.level.getName());
+				new AlertDialog.Builder(getGDActivity())
+						.setTitle(getString(R.string.changed_files_title))
+						.setMessage(msg)
+						.setPositiveButton(getString(R.string.keep_progress),
+								new DialogInterface.OnClickListener() {
+									@Override
+									public void onClick(DialogInterface dialog, int which) {
+										latch.countDown();
+									}
+								})
+						.setNegativeButton(getString(R.string.reset_progress),
+								new DialogInterface.OnClickListener() {
+									@Override
+									public void onClick(DialogInterface dialog, int which) {
+										reset[0] = true;
+										latch.countDown();
+									}
+								})
+						.setCancelable(false)
+						.show();
+			}
+		});
+
+		try {
+			latch.await();
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			// Treat interruption as "Keep" — least destructive default.
+		}
+
+		if (reset[0]) {
+			applyChanged(java.util.Collections.singletonList(change));
+		} else {
+			acknowledgeChanged(java.util.Collections.singletonList(change));
+		}
+	}
+
+	/**
+	 * Re-check the active level's on-disk hash whenever the activity comes
+	 * back from background. Catches the realistic "user backgrounds the app,
+	 * swaps the .mrg in a file manager, returns" workflow.
+	 *
+	 * <p>This is the non-blocking sibling of
+	 * {@link #resolvePendingLoadChangeBlocking()}: at startup we can stall
+	 * the bg init thread before the {@link org.happysanta.gd.Levels.Loader}
+	 * is built, but on resume the loader and menu are already up and holding
+	 * cached pointers / track names from the old file. So once the user
+	 * picks Keep or Reset we have to {@link GDActivity#restartApp()} —
+	 * a DB-only update would still leave stale {@code Loader.pointers},
+	 * {@code Loader.names}, and any cached track listings in place, and the
+	 * very next track pick would index into the new file with the old
+	 * offsets (= garbage).
+	 *
+	 * <p>Safe to call from the UI thread (we push the SAF read off to a
+	 * worker, then post the dialog back). Safe to call multiple times in
+	 * quick succession — guarded by {@link #resumeCheckInFlight}.
+	 *
+	 * <p>No-op for the bundled level (no file), for rows with no recorded
+	 * hash (no baseline to compare to), and on read errors (let the loader
+	 * path surface failures — we don't want a transient SAF hiccup to
+	 * trigger a Reset/Keep prompt against an unread file).
+	 */
+	public void checkActiveLevelOnResume() {
+		final Level active = currentLevel;
+		if (active == null
+				|| active.getId() == 1
+				|| active.getFilename() == null || active.getFilename().isEmpty()
+				|| active.getHash() == null || active.getHash().isEmpty()) {
+			return;
+		}
+		if (resumeCheckInFlight) return;
+		resumeCheckInFlight = true;
+
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				try {
+					final Fingerprint fp;
+					try {
+						fp = fingerprint(active.getFilename());
+					} catch (Throwable t) {
+						logDebug("LevelsManager.checkActiveLevelOnResume: read failed: " + t);
+						return;
+					}
+					if (active.getHash().equals(fp.hash)) return;
+					getGDActivity().runOnUiThread(new Runnable() {
+						@Override
+						public void run() {
+							try {
+								promptResumeChange(active, fp);
+							} finally {
+								// Flag is reset only after the prompt is up
+								// (or skipped). Once the user picks, restart
+								// kicks in and a fresh process will set its
+								// own flag from scratch.
+								resumeCheckInFlight = false;
+							}
+						}
+					});
+				} catch (Throwable outer) {
+					// Belt-and-suspenders: never leave the in-flight flag
+					// stuck on if something unexpected blows up before we
+					// get to the UI-thread post.
+					resumeCheckInFlight = false;
+					logDebug("LevelsManager.checkActiveLevelOnResume: " + outer);
+				}
+			}
+		}, "GD-resume-hashcheck").start();
+	}
+
+	private void promptResumeChange(final Level active, final Fingerprint fp) {
+		final ChangedLevel change = new ChangedLevel(active, fp.hash,
+				fp.header.getCount(0), fp.header.getCount(1), fp.header.getCount(2));
+		String msg = String.format(getString(R.string.changed_file_load_message),
+				active.getName());
+		new AlertDialog.Builder(getGDActivity())
+				.setTitle(getString(R.string.changed_files_title))
+				.setMessage(msg)
+				.setPositiveButton(getString(R.string.keep_progress),
+						new DialogInterface.OnClickListener() {
+							@Override
+							public void onClick(DialogInterface dialog, int which) {
+								acknowledgeChanged(java.util.Collections.singletonList(change));
+								// See method javadoc: Loader and menu hold
+								// stale pointers / names — only a process
+								// restart rebuilds them against the file
+								// that's actually on disk now.
+								getGDActivity().restartApp();
+							}
+						})
+				.setNegativeButton(getString(R.string.reset_progress),
+						new DialogInterface.OnClickListener() {
+							@Override
+							public void onClick(DialogInterface dialog, int which) {
+								applyChanged(java.util.Collections.singletonList(change));
+								getGDActivity().restartApp();
+							}
+						})
+				.setCancelable(false)
+				.show();
 	}
 
 	public void resetId() {
@@ -190,7 +404,20 @@ public class LevelsManager {
 		String base = Filenames.sanitizeBase(name, 0);
 		String filename = Filenames.uniqueIn(storage.getTree(), base, dataSource.getAllFilenames());
 
-		Level level = dataSource.createLevel(name, author, filename, header.getCount(0), header.getCount(1), header.getCount(2), 0, getTimestamp(), false, apiId);
+		// Hash the source temp file before copy so we can recognize it later
+		// if the user swaps it out via a file manager (rescan path uses this
+		// to detect "same name, different content").
+		String hash;
+		try {
+			hash = Hashing.sha256(file);
+		} catch (IOException e) {
+			// Hashing failure shouldn't block install; an empty hash just
+			// means the next rescan will silently backfill from disk.
+			logDebug("LevelsManager.install: hashing failed: " + e);
+			hash = "";
+		}
+
+		Level level = dataSource.createLevel(name, author, filename, hash, header.getCount(0), header.getCount(1), header.getCount(2), 0, getTimestamp(), false, apiId);
 		long id = level.getId();
 		if (id < 1) {
 			throw new Exception(getString(R.string.e_cannot_save_level));
@@ -228,18 +455,68 @@ public class LevelsManager {
 		}.execute(file, name, author, apiId);
 	}
 
-	public void load(Level level) throws RuntimeException {
-		/*File file = getMrgFileById(level.getId());
-		if (!mrgIsAvailable(level.getId())) {
-			throw new RuntimeException("Unable to load levels \"" +level.getName() + "\"");
-		}*/
+	public void load(final Level level) throws RuntimeException {
+		// Hash precheck: if the on-disk file no longer matches the hash we
+		// recorded at install/scan time, ask the user before binding scores
+		// and unlocks to a different level pack. Skip for the bundled level
+		// (no file), for rows with no stored hash (legacy / freshly-adopted
+		// — adopt silently after load), and if the storage layer can't get
+		// us the file at all (let the loader path surface the error).
+		boolean canVerify = level != null
+				&& level.getId() != 1
+				&& level.getFilename() != null && !level.getFilename().isEmpty()
+				&& level.getHash() != null && !level.getHash().isEmpty();
+		if (!canVerify) {
+			doLoad(level);
+			return;
+		}
 
-		// Loader loader = getLevelLoader();
-		// Menu menu = getGameMenu();
+		Fingerprint fp;
+		try {
+			fp = fingerprint(level.getFilename());
+		} catch (Throwable t) {
+			logDebug("LevelsManager.load: hash precheck failed: " + t);
+			doLoad(level);
+			return;
+		}
 
-		// loader.setLevelsFile(file);
-		// menu.reloadLevels();
+		if (level.getHash().equals(fp.hash)) {
+			doLoad(level);
+			return;
+		}
 
+		// Content drifted. Same Keep/Reset choice as the rescan path, but
+		// scoped to this single level — the user's intent is "play this
+		// level *now*", so we settle the bind question and continue.
+		final ChangedLevel change = new ChangedLevel(level, fp.hash,
+				fp.header.getCount(0), fp.header.getCount(1), fp.header.getCount(2));
+		String msg = String.format(getString(R.string.changed_file_load_message), level.getName());
+		new AlertDialog.Builder(getGDActivity())
+				.setTitle(getString(R.string.changed_files_title))
+				.setMessage(msg)
+				.setPositiveButton(getString(R.string.keep_progress),
+						new DialogInterface.OnClickListener() {
+							@Override
+							public void onClick(DialogInterface dialog, int which) {
+								// Acknowledge so we don't keep flagging
+								// the same change next launch / rescan.
+								acknowledgeChanged(java.util.Collections.singletonList(change));
+								doLoad(level);
+							}
+						})
+				.setNegativeButton(getString(R.string.reset_progress),
+						new DialogInterface.OnClickListener() {
+							@Override
+							public void onClick(DialogInterface dialog, int which) {
+								applyChanged(java.util.Collections.singletonList(change));
+								doLoad(level);
+							}
+						})
+				.setCancelable(false)
+				.show();
+	}
+
+	private void doLoad(Level level) {
 		setCurrentId(level.getId());
 		getGDActivity().restartApp();
 	}
@@ -282,6 +559,17 @@ public class LevelsManager {
 	}
 
 	public void delete(Level level) {
+		// If the user is deleting the currently-active level (today only
+		// reachable via the "remove missing level" flow — the normal Delete
+		// action is hidden when a level is active), fall back to the bundled
+		// default before nuking the row. Otherwise currentLevel would be
+		// pointing at a freshly-deleted row, and the next getCurrentId() /
+		// getCurrentLevelSource() call would NPE / FileNotFoundException.
+		if (currentLevel != null && level.getId() == currentLevel.getId()) {
+			resetId();
+			reload();
+		}
+
 		dataSource.deleteLevel(level);
 		try {
 			String filename = level.getFilename();
@@ -535,54 +823,214 @@ public class LevelsManager {
 	}
 
 	/**
-	 * Walk the SAF folder and add a DB row for each {@code .mrg} file that
-	 * isn't already tracked. Returns the number of new rows. Triggered from
-	 * the "Rescan folder" menu entry — lets the user drop a {@code .mrg}
-	 * into the folder from a file manager and have it show up in-game.
-	 *
-	 * <p>We read the level header to get the track counts (and validate
-	 * that the file is a real {@code .mrg}). Files that don't parse are
-	 * skipped silently — surfacing each parse error would be noisy if the
-	 * user has unrelated junk in the folder.
+	 * Result of {@link #scanFolder()}: counts of newly-adopted files plus a
+	 * list of existing rows whose on-disk content has changed since we last
+	 * recorded a hash. Caller (Menu) prompts the user before applying the
+	 * changed-file replacements via {@link #applyChanged(List)}.
 	 */
-	public synchronized int scanFolder() {
-		if (!storage.hasLocation()) return 0;
+	public static class ScanResult {
+		public final int added;
+		public final List<ChangedLevel> changed;
 
-		java.util.Set<String> known = dataSource.getAllFilenames();
+		ScanResult(int added, List<ChangedLevel> changed) {
+			this.added = added;
+			this.changed = changed;
+		}
+	}
+
+	/**
+	 * A row whose stored hash no longer matches the on-disk file. Carries
+	 * the new header info so {@link #applyChanged(List)} doesn't need to
+	 * re-read and re-parse the file.
+	 */
+	public static class ChangedLevel {
+		public final Level level;
+		public final String newHash;
+		public final int newCountEasy;
+		public final int newCountMedium;
+		public final int newCountHard;
+
+		ChangedLevel(Level level, String newHash, int e, int m, int h) {
+			this.level = level;
+			this.newHash = newHash;
+			this.newCountEasy = e;
+			this.newCountMedium = m;
+			this.newCountHard = h;
+		}
+	}
+
+	/**
+	 * Walk the SAF folder and reconcile with the DB. Two outputs:
+	 * <ul>
+	 *   <li><b>added</b>: count of {@code .mrg} files we hadn't seen before
+	 *       and just created rows for.</li>
+	 *   <li><b>changed</b>: existing rows whose recorded {@link Level#getHash()}
+	 *       no longer matches the on-disk file. These need a user decision
+	 *       (replace metadata + wipe scores, or keep the lie) — we don't
+	 *       silently re-bind, because the new file could be a totally
+	 *       different level pack the user dropped in under the same name.</li>
+	 * </ul>
+	 *
+	 * <p>Files with no stored hash (legacy v2 rows) are silently backfilled
+	 * with whatever's on disk — there's no prior fingerprint to compare to,
+	 * so flagging them as "changed" would be noise.
+	 *
+	 * <p>Files that don't parse as {@code .mrg} are skipped silently — the
+	 * user might have unrelated junk in the folder.
+	 */
+	public synchronized ScanResult scanFolder() {
+		if (!storage.hasLocation()) return new ScanResult(0, java.util.Collections.<ChangedLevel>emptyList());
+
+		// Build a name → existing-row map so we can spot existing files in
+		// one pass without N round-trips to the DB.
+		java.util.Map<String, Level> known = new java.util.HashMap<>();
+		for (Level l : dataSource.getAllLevels()) {
+			String f = l.getFilename();
+			if (f != null && !f.isEmpty()) known.put(f, l);
+		}
+
 		List<String> onDisk = storage.listMrgFiles();
 		int added = 0;
-		for (String name : onDisk) {
-			if (known.contains(name)) continue;
+		List<ChangedLevel> changed = new ArrayList<>();
 
-			LevelHeader header;
-			InputStream in = null;
+		for (String name : onDisk) {
+			Fingerprint fp;
 			try {
-				in = storage.openLevel(name);
-				header = Reader.readHeader(in);
+				fp = fingerprint(name);
 			} catch (Throwable t) {
 				logDebug("LevelsManager.scanFolder: skipping " + name + " — " + t);
 				continue;
-			} finally {
-				if (in != null) try { in.close(); } catch (IOException ignore) {}
 			}
-			if (!header.isCountsOk()) {
+			if (!fp.header.isCountsOk()) {
 				logDebug("LevelsManager.scanFolder: skipping " + name + " — bad counts");
 				continue;
 			}
 
-			// Display name: strip ".mrg" extension. Author and apiId aren't
-			// in the file format, so we leave them empty / 0; the user can
-			// see the file is there even without those.
-			String displayName = name.substring(0, name.length() - 4);
-			Level level = dataSource.createLevel(displayName, "", name,
-					header.getCount(0), header.getCount(1), header.getCount(2),
-					0, getTimestamp(), false, 0);
-			if (level != null && level.getId() > 0) {
-				added++;
-				logDebug("LevelsManager.scanFolder: added " + name + " as id " + level.getId());
+			Level existing = known.get(name);
+			if (existing == null) {
+				// Brand new file. Display name strips the .mrg extension.
+				String displayName = name.substring(0, name.length() - 4);
+				Level level = dataSource.createLevel(displayName, "", name, fp.hash,
+						fp.header.getCount(0), fp.header.getCount(1), fp.header.getCount(2),
+						0, getTimestamp(), false, 0);
+				if (level != null && level.getId() > 0) {
+					added++;
+					logDebug("LevelsManager.scanFolder: added " + name + " as id " + level.getId());
+				}
+				continue;
+			}
+
+			String existingHash = existing.getHash();
+			if (existingHash == null || existingHash.isEmpty()) {
+				// First time we've seen this row's file post-v3 upgrade.
+				// Adopt the current hash silently — no prior fingerprint
+				// means no honest way to call this "changed".
+				dataSource.updateHash(existing.getId(), fp.hash);
+				logDebug("LevelsManager.scanFolder: backfilled hash for " + name + " (id " + existing.getId() + ")");
+				continue;
+			}
+
+			if (!existingHash.equals(fp.hash)) {
+				logDebug("LevelsManager.scanFolder: " + name + " changed (id " + existing.getId() + ")");
+				changed.add(new ChangedLevel(existing, fp.hash,
+						fp.header.getCount(0), fp.header.getCount(1), fp.header.getCount(2)));
 			}
 		}
-		return added;
+		return new ScanResult(added, changed);
+	}
+
+	/**
+	 * Header + content hash from a single SAF read. Tees bytes through a
+	 * SHA-256 {@link java.security.DigestInputStream} while the header
+	 * parser reads from the front of the file, then drains the rest into
+	 * a discard buffer to finish the hash. One open instead of two — SAF
+	 * IPC dwarfs hashing cost.
+	 */
+	static class Fingerprint {
+		final LevelHeader header;
+		final String hash;
+
+		Fingerprint(LevelHeader header, String hash) {
+			this.header = header;
+			this.hash = hash;
+		}
+	}
+
+	private Fingerprint fingerprint(String filename) throws IOException {
+		InputStream in = storage.openLevel(filename);
+		try {
+			java.security.MessageDigest md = Hashing.newSha256();
+			final java.security.DigestInputStream dis = new java.security.DigestInputStream(in, md);
+			// Reader.readHeader closes the stream it's given (Loader depends
+			// on that). Shield our DigestInputStream so we can keep reading
+			// after the header parse to drain the rest into the digest.
+			java.io.FilterInputStream shield = new java.io.FilterInputStream(dis) {
+				@Override public void close() { /* no-op */ }
+			};
+			LevelHeader header = Reader.readHeader(shield);
+			byte[] buf = new byte[8192];
+			int n;
+			while ((n = dis.read(buf)) != -1) {
+				// Discard — we only care about feeding the digest.
+			}
+			return new Fingerprint(header, Hashing.toHex(md.digest()));
+		} finally {
+			try { in.close(); } catch (IOException ignore) {}
+		}
+	}
+
+	/**
+	 * Apply the user-confirmed "Reset progress" decision to a list of
+	 * {@link ChangedLevel}s from a prior {@link #scanFolder()} call. For
+	 * each row: refresh hash + counts + install timestamp, and wipe scores
+	 * / unlocks (the old data referred to a different track layout).
+	 *
+	 * <p>If the active level is one of the replaced rows, refresh
+	 * {@code currentLevel} from the DB so it reflects the cleared state —
+	 * we stay on the same level since the user is presumably about to play
+	 * it (the prompt fires *because* they tried to load it or because the
+	 * launch path detected the swap).
+	 */
+	public synchronized void applyChanged(List<ChangedLevel> changes) {
+		if (changes == null || changes.isEmpty()) return;
+		long now = getTimestamp();
+		boolean activeReplaced = false;
+		for (ChangedLevel c : changes) {
+			dataSource.replaceLevelContent(c.level.getId(), c.newHash,
+					c.newCountEasy, c.newCountMedium, c.newCountHard, now);
+			if (currentLevel != null && c.level.getId() == currentLevel.getId()) {
+				activeReplaced = true;
+			}
+		}
+		if (activeReplaced) {
+			// Re-pull from DB so cached counts / cleared unlocks are correct.
+			reload();
+		}
+	}
+
+	/**
+	 * Apply the user-confirmed "Keep progress" decision: refresh the
+	 * stored hash + cached counts so we don't keep flagging the same
+	 * change on every check, but preserve scores and unlocks. The user
+	 * has explicitly opted to let their existing progress carry over to
+	 * whatever the new file's tracks happen to be.
+	 */
+	public synchronized void acknowledgeChanged(List<ChangedLevel> changes) {
+		if (changes == null || changes.isEmpty()) return;
+		long now = getTimestamp();
+		boolean activeAcked = false;
+		for (ChangedLevel c : changes) {
+			dataSource.acknowledgeContent(c.level.getId(), c.newHash,
+					c.newCountEasy, c.newCountMedium, c.newCountHard, now);
+			if (currentLevel != null && c.level.getId() == currentLevel.getId()) {
+				activeAcked = true;
+			}
+		}
+		if (activeAcked) {
+			// Refresh cached counts so the listing is consistent with the
+			// new file. Unlocks are intentionally preserved.
+			reload();
+		}
 	}
 
 	/**

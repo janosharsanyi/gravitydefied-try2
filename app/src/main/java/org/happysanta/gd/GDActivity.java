@@ -498,6 +498,12 @@ public class GDActivity extends Activity implements Runnable {
 				MenuHelmetView.clearStaticFields();
 
 				levelsManager = new LevelsManager();
+				// If the active level's file was swapped while the app was
+				// off, ask the user (Keep/Reset) BEFORE we build the loader
+				// and menu — both consume currentLevel's counts/unlocks, and
+				// we want them to see the post-decision state. Blocks this
+				// bg init thread until the user answers.
+				levelsManager.resolvePendingLoadChangeBlocking();
 				try {
 					levelLoader = new Loader(levelsManager.getCurrentLevelSource());
 				} catch (IOException e) {
@@ -597,6 +603,7 @@ public class GDActivity extends Activity implements Runnable {
 		menu.showMenu(0);
 		if (/*menu != null && */menu.canStartTrack())
 			restart(true);
+
 		l1 = 0L;
 
 		// try {
@@ -726,6 +733,18 @@ public class GDActivity extends Activity implements Runnable {
 			wasPaused = false;
 
 			// Menu.HelmetRotation.start();
+
+			// Resume from background = the user might have swapped the
+			// active level's .mrg via a file manager while we weren't
+			// looking. The Loader and menu hold cached pointers / names
+			// from the old file — playing a track now would index the
+			// stale offsets into the new bytes (= garbage, likely crash).
+			// checkActiveLevelOnResume() runs the SAF read off the UI
+			// thread, prompts Keep/Reset on mismatch, and triggers a
+			// restartApp() on either decision so all caches rebuild.
+			if (levelsManager != null) {
+				levelsManager.checkActiveLevelOnResume();
+			}
 		}
 	}
 
