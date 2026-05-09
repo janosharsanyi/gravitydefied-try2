@@ -7,8 +7,10 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Rect;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.OpenableColumns;
 import android.text.Html;
 import android.view.*;
 import android.widget.FrameLayout;
@@ -31,7 +33,11 @@ import org.happysanta.gd.Storage.LevelStorage;
 // Originally org.acra.util.Installation, replaced when ACRA was dropped.
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 
@@ -100,6 +106,25 @@ public class GDActivity extends Activity implements Runnable {
 	// so we use the legacy startActivityForResult / onActivityResult flow.
 	private static final int RC_PICK_LEVELS_FOLDER = 0x6FD1; // arbitrary
 	private Runnable pendingFolderPickedCallback;
+
+	// Manual .mrg install picker. Replaces the old custom FileDialog rooted
+	// at Environment.getExternalStorageDirectory() — both are blocked under
+	// scoped storage. Uses ACTION_OPEN_DOCUMENT to get a single content:// URI,
+	// then spills the bytes to a cache temp file so the existing
+	// LevelsManager.install(File, ...) signature still applies.
+	private static final int RC_PICK_MRG_FILE = 0x6FD2;
+	private MrgFilePickedCallback pendingMrgFileCallback;
+
+	/** Callback fired when the user picks a {@code .mrg} via the system picker. */
+	public interface MrgFilePickedCallback {
+		/**
+		 * @param tempFile cache-dir copy of the picked file — caller owns it
+		 *                 and is responsible for deleting it when done.
+		 * @param displayName the original file's display name (e.g. "fun-pack.mrg"),
+		 *                    or null if the system didn't expose one.
+		 */
+		void onPicked(File tempFile, String displayName);
+	}
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -759,20 +784,95 @@ public class GDActivity extends Activity implements Runnable {
 		startActivityForResult(LevelStorage.createPickerIntent(), RC_PICK_LEVELS_FOLDER);
 	}
 
+	/**
+	 * Launch the SAF single-file picker so the user can choose a {@code .mrg}
+	 * from anywhere on the device. The picker hands back a {@code content://}
+	 * URI; we copy its bytes into a cache-dir temp file and pass that to the
+	 * callback (so callers can keep the existing {@code File}-based install
+	 * path). Cancelling the picker drops the callback silently.
+	 *
+	 * <p>MIME type is {@code *&#47;*} because {@code .mrg} isn't a registered
+	 * MIME — restricting would hide valid files. Validity is enforced later
+	 * by {@code LevelsManager.install} via the header check.
+	 */
+	public void requestMrgFile(MrgFilePickedCallback callback) {
+		pendingMrgFileCallback = callback;
+		Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+		intent.addCategory(Intent.CATEGORY_OPENABLE);
+		intent.setType("*/*");
+		startActivityForResult(intent, RC_PICK_MRG_FILE);
+	}
+
 	@Override
 	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
 		super.onActivityResult(requestCode, resultCode, data);
-		if (requestCode != RC_PICK_LEVELS_FOLDER) return;
 
-		Runnable callback = pendingFolderPickedCallback;
-		pendingFolderPickedCallback = null;
+		if (requestCode == RC_PICK_LEVELS_FOLDER) {
+			Runnable callback = pendingFolderPickedCallback;
+			pendingFolderPickedCallback = null;
 
-		if (resultCode != RESULT_OK || data == null || data.getData() == null) {
-			// User cancelled or system returned no URI — no further action.
+			if (resultCode != RESULT_OK || data == null || data.getData() == null) {
+				// User cancelled or system returned no URI — no further action.
+				return;
+			}
+			levelsManager.getStorage().setLocation(data.getData());
+			if (callback != null) callback.run();
 			return;
 		}
-		levelsManager.getStorage().setLocation(data.getData());
-		if (callback != null) callback.run();
+
+		if (requestCode == RC_PICK_MRG_FILE) {
+			MrgFilePickedCallback callback = pendingMrgFileCallback;
+			pendingMrgFileCallback = null;
+
+			if (resultCode != RESULT_OK || data == null || data.getData() == null || callback == null) {
+				return;
+			}
+			Uri uri = data.getData();
+			String displayName = queryDisplayName(uri);
+			try {
+				File tempFile = copyUriToCache(uri);
+				callback.onPicked(tempFile, displayName);
+			} catch (IOException e) {
+				e.printStackTrace();
+				new AlertDialog.Builder(this)
+						.setTitle(getString(R.string.error))
+						.setMessage("Could not read picked file: " + e.getMessage())
+						.setPositiveButton(android.R.string.ok, null)
+						.show();
+			}
+		}
+	}
+
+	/** Look up DISPLAY_NAME for a content URI, or null on miss / non-content URI. */
+	private String queryDisplayName(Uri uri) {
+		if (uri == null || !"content".equals(uri.getScheme())) return null;
+		try (Cursor cursor = getContentResolver().query(
+				uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+			if (cursor != null && cursor.moveToFirst()) {
+				int idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+				if (idx >= 0) return cursor.getString(idx);
+			}
+		} catch (Exception ignore) {
+			// Some providers throw on metadata queries; fall through to null.
+		}
+		return null;
+	}
+
+	/** Spill a content URI to a unique cache-dir file. Caller deletes when done. */
+	private File copyUriToCache(Uri uri) throws IOException {
+		File temp = File.createTempFile("manual-", ".mrg", getCacheDir());
+		try (InputStream in = getContentResolver().openInputStream(uri);
+		     OutputStream out = new FileOutputStream(temp)) {
+			if (in == null) {
+				throw new IOException("ContentResolver returned null for " + uri);
+			}
+			byte[] buf = new byte[8192];
+			int n;
+			while ((n = in.read(buf)) > 0) {
+				out.write(buf, 0, n);
+			}
+		}
+		return temp;
 	}
 
 	@Override

@@ -5,12 +5,11 @@ import android.app.ProgressDialog;
 import android.content.DialogInterface;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.os.Environment;
 import android.text.Html;
 import android.text.InputType;
 import android.widget.EditText;
 import org.happysanta.gd.Command;
-import org.happysanta.gd.FileDialog;
+import org.happysanta.gd.DoubleCallback;
 import org.happysanta.gd.GDActivity;
 import org.happysanta.gd.Game.GameView;
 import org.happysanta.gd.Global;
@@ -1496,15 +1495,72 @@ public class Menu
 
 	public void installFromFileBrowse() {
 		// Pre-scoped-storage this opened a custom FileDialog rooted at
-		// Environment.getExternalStorageDirectory() — both that root and
-		// the homemade browser are blocked on modern Android. The proper
-		// replacement is ACTION_OPEN_DOCUMENT (single-file SAF picker)
-		// returning a content:// Uri that we read via ContentResolver.
-		// Tracked in MIGRATION_PLAN.md under "Restore manual .mrg install
-		// via SAF". Until then, point the user at the in-app downloader.
-		showAlert(getString(R.string.oops),
-				"Manual .mrg install isn't ported yet.\n\nUse \"Download mods\" instead.",
-				null);
+		// Environment.getExternalStorageDirectory(). Modern replacement: SAF
+		// single-file picker (ACTION_OPEN_DOCUMENT) via GDActivity, which
+		// hands us a cache-dir temp file we then feed to the existing
+		// installAsync() path. Same prompt-for-name UX as the original.
+		final GDActivity gd = getGDActivity();
+		gd.requestMrgFile(new GDActivity.MrgFilePickedCallback() {
+			@Override
+			public void onPicked(final File tempFile, String displayName) {
+				// Default name: the picked file's display name minus ".mrg".
+				// Keeps parity with the old flow which fell back to file.getName().
+				String defaultName = displayName != null ? displayName : tempFile.getName();
+				if (defaultName.toLowerCase().endsWith(".mrg")) {
+					defaultName = defaultName.substring(0, defaultName.length() - 4);
+				}
+
+				final EditText input = new EditText(gd);
+				input.setInputType(InputType.TYPE_CLASS_TEXT);
+				input.setText(defaultName);
+
+				new AlertDialog.Builder(gd)
+						.setTitle(getString(R.string.enter_levels_name_title))
+						.setMessage(getString(R.string.enter_levels_name))
+						.setView(input)
+						.setPositiveButton(getString(R.string.ok), new DialogInterface.OnClickListener() {
+							@Override
+							public void onClick(DialogInterface dialog, int whichButton) {
+								String name = input.getText().toString();
+								if (name.equals("")) name = tempFile.getName();
+
+								// SAF storage may not be set up yet — gate the install on the
+								// folder picker the same way downloadLevel does.
+								final String finalName = name;
+								gd.requestLevelsFolderIfNeeded(new Runnable() {
+									@Override
+									public void run() {
+										gd.levelsManager.installAsync(tempFile, finalName, "", 0, new DoubleCallback() {
+											@Override
+											public void onDone(Object... objects) {
+												tempFile.delete();
+												gd.levelsManager.showSuccessfullyInstalledDialog();
+											}
+											@Override
+											public void onFail() {
+												tempFile.delete();
+												// installAsync already showed an error dialog.
+											}
+										});
+									}
+								});
+							}
+						})
+						.setNegativeButton(getString(R.string.cancel), new DialogInterface.OnClickListener() {
+							@Override
+							public void onClick(DialogInterface dialog, int which) {
+								tempFile.delete();
+							}
+						})
+						.setOnCancelListener(new DialogInterface.OnCancelListener() {
+							@Override
+							public void onCancel(DialogInterface dialog) {
+								tempFile.delete();
+							}
+						})
+						.show();
+			}
+		});
 	}
 
 	public static boolean isNameCheat(byte[] chars) {
