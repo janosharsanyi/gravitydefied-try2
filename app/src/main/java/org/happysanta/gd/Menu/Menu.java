@@ -21,7 +21,6 @@ import org.happysanta.gd.Settings;
 import org.happysanta.gd.Storage.HighScores;
 import org.happysanta.gd.Storage.Level;
 import org.happysanta.gd.Storage.LevelsManager;
-import org.acra.ACRA;
 
 import java.io.File;
 import java.io.UnsupportedEncodingException;
@@ -1299,11 +1298,6 @@ public class Menu
 	protected void startTrack(int levelIndex, int trackIndex) {
 		// ATTENTION!!!
 		// WHEN CHANGING THIS CODE, COPY-PASTE TO saveCompletedTrack() !!!
-
-		if (Global.ACRA_ENABLED) {
-			ACRA.getErrorReporter().putCustomData("level_index:", String.valueOf(levelIndex));
-			ACRA.getErrorReporter().putCustomData("track_index:", String.valueOf(trackIndex));
-		}
 
 		/*Menu _menu = null;
 		_menu.back();*/

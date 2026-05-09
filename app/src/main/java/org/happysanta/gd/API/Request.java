@@ -1,19 +1,16 @@
 package org.happysanta.gd.API;
 
 import android.os.AsyncTask;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
-import org.apache.http.NameValuePair;
-import org.apache.http.client.entity.UrlEncodedFormEntity;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.message.BasicNameValuePair;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
 import java.util.List;
 import java.util.Locale;
 
@@ -40,10 +37,10 @@ public class Request {
 	private void construct(String method, List<NameValuePair> params, ResponseHandler handler, String apiURL) {
 		this.apiURL = apiURL;
 
-		params.add(new BasicNameValuePair("v", String.valueOf(API.VERSION)));
-		params.add(new BasicNameValuePair("method", method));
-		params.add(new BasicNameValuePair("app_version", getAppVersion()));
-		params.add(new BasicNameValuePair("app_lang", Locale.getDefault().getDisplayLanguage()));
+		params.add(new NameValuePair("v", String.valueOf(API.VERSION)));
+		params.add(new NameValuePair("method", method));
+		params.add(new NameValuePair("app_version", getAppVersion()));
+		params.add(new NameValuePair("app_lang", Locale.getDefault().getDisplayLanguage()));
 
 		this.params = params;
 		this.handler = handler;
@@ -93,32 +90,51 @@ public class Request {
 		protected String doInBackground(String... objects) {
 			String url = objects[0];
 
-			DefaultHttpClient client = new DefaultHttpClient();
-			HttpPost post = new HttpPost(url);
+			// Build URL-encoded form body. Replaces Apache's UrlEncodedFormEntity.
+			byte[] bodyBytes;
 			try {
-				post.setEntity(new UrlEncodedFormEntity(params));
+				StringBuilder body = new StringBuilder();
+				for (NameValuePair pair : params) {
+					if (body.length() > 0) body.append('&');
+					body.append(URLEncoder.encode(pair.getName(), "UTF-8"));
+					body.append('=');
+					body.append(URLEncoder.encode(pair.getValue(), "UTF-8"));
+				}
+				bodyBytes = body.toString().getBytes("UTF-8");
 			} catch (UnsupportedEncodingException e) {
 				e.printStackTrace();
 				return null;
 			}
-			String result = null;
+
+			HttpURLConnection conn = null;
 			InputStream is = null;
-
 			try {
-				HttpResponse response = client.execute(post);
-				HttpEntity entity = response.getEntity();
-				is = entity.getContent();
+				conn = (HttpURLConnection) new URL(url).openConnection();
+				conn.setRequestMethod("POST");
+				conn.setDoOutput(true);
+				conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+				conn.setRequestProperty("Content-Length", String.valueOf(bodyBytes.length));
+				conn.setConnectTimeout(15_000);
+				conn.setReadTimeout(30_000);
 
+				OutputStream os = conn.getOutputStream();
+				try {
+					os.write(bodyBytes);
+					os.flush();
+				} finally {
+					os.close();
+				}
+
+				is = conn.getInputStream();
 				BufferedReader reader = new BufferedReader(new InputStreamReader(is, "UTF-8"), 8);
 				StringBuilder sb = new StringBuilder();
-
 				String line;
 				while ((line = reader.readLine()) != null) {
 					if (isCancelled()) break;
-					sb.append(line + "\n");
+					sb.append(line).append('\n');
 				}
-				result = sb.toString();
-			} catch (java.lang.Exception e) {
+				return sb.toString();
+			} catch (Exception e) {
 				logDebug("API request failed: " + e.getMessage());
 				// e.printStackTrace();
 				return null;
@@ -128,9 +144,8 @@ public class Request {
 				} catch (IOException e) {
 					// e.printStackTrace();
 				}
+				if (conn != null) conn.disconnect();
 			}
-
-			return result;
 		}
 
 		@Override

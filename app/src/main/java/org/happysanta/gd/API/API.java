@@ -1,8 +1,5 @@
 package org.happysanta.gd.API;
 
-import org.apache.http.NameValuePair;
-import org.apache.http.message.BasicNameValuePair;
-
 import java.io.*;
 import java.util.LinkedList;
 import java.util.List;
@@ -19,31 +16,31 @@ public class API {
 	public static Request getLevels(int offset, int limit, LevelsSortType sort, ResponseHandler handler)
 			throws Exception {
 		List<NameValuePair> params = new LinkedList<NameValuePair>();
-		params.add(new BasicNameValuePair("sort", sort.toString()));
-		params.add(new BasicNameValuePair("offset", String.valueOf(offset)));
-		params.add(new BasicNameValuePair("limit", String.valueOf(limit)));
+		params.add(new NameValuePair("sort", sort.toString()));
+		params.add(new NameValuePair("offset", String.valueOf(offset)));
+		params.add(new NameValuePair("limit", String.valueOf(limit)));
 
 		return new Request("getLevels", params, handler);
 	}
 
 	public static Request getNotifications(boolean installedFromAPK, ResponseHandler handler) {
 		List<NameValuePair> params = new LinkedList<NameValuePair>();
-		params.add(new BasicNameValuePair("apk", String.valueOf(installedFromAPK ? 1 : 0)));
+		params.add(new NameValuePair("apk", String.valueOf(installedFromAPK ? 1 : 0)));
 		return new Request("getNotifications", params, handler);
 	}
 
 	public static Request sendStats(String statsJSON, String installationID, int useCheats, ResponseHandler handler) {
 		List<NameValuePair> params = new LinkedList<NameValuePair>();
-		params.add(new BasicNameValuePair("stats", statsJSON));
-		params.add(new BasicNameValuePair("id", installationID));
-		params.add(new BasicNameValuePair("use_cheats", String.valueOf(useCheats)));
+		params.add(new NameValuePair("stats", statsJSON));
+		params.add(new NameValuePair("id", installationID));
+		params.add(new NameValuePair("use_cheats", String.valueOf(useCheats)));
 		return new Request("sendStats", params, handler);
 	}
 
 	public static Request sendKeyboardLogs(String log, ResponseHandler handler) {
 		List<NameValuePair> params = new LinkedList<NameValuePair>();
-		params.add(new BasicNameValuePair("log", log));
-		params.add(new BasicNameValuePair("device", getDeviceName()));
+		params.add(new NameValuePair("log", log));
+		params.add(new NameValuePair("device", getDeviceName()));
 		return new Request("sendKeyboardLogs", params, handler, true);
 	}
 

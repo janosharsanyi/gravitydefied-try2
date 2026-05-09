@@ -3,7 +3,6 @@ package org.happysanta.gd.API;
 import android.content.Context;
 import android.os.AsyncTask;
 import android.os.PowerManager;
-import org.apache.http.HttpException;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -64,7 +63,10 @@ public class DownloadFile {
 				// expect HTTP 200 OK, so we don't mistakenly save error report
 				// instead of the file
 				if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) {
-					return new HttpException("Server returned HTTP " + connection.getResponseCode()
+					// Was org.apache.http.HttpException; replaced with IOException since
+					// the legacy http library is gone and the result is just used as a
+					// Throwable to surface to the download handler.
+					return new IOException("Server returned HTTP " + connection.getResponseCode()
 							+ " " + connection.getResponseMessage());
 				}
 

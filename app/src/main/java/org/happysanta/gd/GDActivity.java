@@ -27,7 +27,8 @@ import org.happysanta.gd.Menu.Views.MenuTextView;
 import org.happysanta.gd.Menu.Views.MenuTitleLinearLayout;
 import org.happysanta.gd.Menu.Views.ObservableScrollView;
 import org.happysanta.gd.Storage.LevelsManager;
-import org.acra.util.Installation;
+// Installation is in this same package (org.happysanta.gd) — no import needed.
+// Originally org.acra.util.Installation, replaced when ACRA was dropped.
 import org.json.JSONObject;
 
 import java.io.IOException;

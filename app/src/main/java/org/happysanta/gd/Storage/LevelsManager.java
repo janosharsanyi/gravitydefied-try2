@@ -19,7 +19,6 @@ import org.happysanta.gd.Menu.Menu;
 import org.happysanta.gd.Menu.MenuScreen;
 import org.happysanta.gd.R;
 import org.happysanta.gd.Settings;
-import org.acra.ACRA;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -95,9 +94,6 @@ public class LevelsManager {
 			logDebug("LevelsManager: level = " + currentLevel);
 		}
 
-		if (Global.ACRA_ENABLED) {
-			ACRA.getErrorReporter().putCustomData("level_api_id:", String.valueOf(currentLevel.getApiId()));
-		}
 	}
 
 	public void closeDataSource() {
