@@ -4,8 +4,6 @@ import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.DialogInterface;
 import android.os.AsyncTask;
-import android.os.Environment;
-import android.os.StatFs;
 import org.happysanta.gd.API.API;
 import org.happysanta.gd.API.DownloadFile;
 import org.happysanta.gd.API.DownloadHandler;
@@ -15,7 +13,7 @@ import org.happysanta.gd.GDActivity;
 import org.happysanta.gd.Global;
 import org.happysanta.gd.Levels.LevelHeader;
 import org.happysanta.gd.Levels.Reader;
-// LevelSource / AssetLevelSource are in this same package (Storage) — no import needed.
+// LevelSource / AssetLevelSource / DocumentLevelSource / LevelStorage are in this same package.
 import org.happysanta.gd.Menu.Menu;
 import org.happysanta.gd.Menu.MenuScreen;
 import org.happysanta.gd.R;
@@ -42,12 +40,14 @@ import static org.happysanta.gd.Helpers.showAlert;
 public class LevelsManager {
 
 	private LevelsDataSource dataSource;
+	private LevelStorage storage;
 	private boolean dbOK = false;
 	private Level currentLevel;
 
 	public LevelsManager() {
 		GDActivity gd = getGDActivity();
 		dataSource = new LevelsDataSource(gd);
+		storage = new LevelStorage(gd);
 
 		try {
 			dataSource.open();
@@ -118,39 +118,33 @@ public class LevelsManager {
 		return currentLevel;
 	}
 
-	public File getCurrentLevelsFile() {
-		if (currentLevel.getId() > 1)
-			return getMrgFileById(currentLevel.getId());
-
-		return null;
-	}
-
 	/**
 	 * Returns the {@link LevelSource} that {@link org.happysanta.gd.Levels.Loader}
 	 * should read from for the current level.
 	 *
 	 * <p>Built-in level (id == 1) → bundled {@code assets/levels.mrg} via
-	 * {@link AssetLevelSource}. Downloaded levels (id &gt; 1) → currently
-	 * {@code null}, which makes {@code Loader} fall back to the asset
-	 * stream too. Commit 3 wires the SAF-backed {@code DocumentLevelSource}
-	 * here. Until then downloads don't land anywhere reachable, so id &gt; 1
-	 * is unreachable in practice ({@code mrgIsAvailable} forces a reset to
-	 * id == 1 in the constructor).
+	 * {@link AssetLevelSource}. Downloaded levels (id &gt; 1) → SAF-backed
+	 * {@code {id}.mrg} in the user-chosen folder via {@link DocumentLevelSource}.
 	 */
 	public LevelSource getCurrentLevelSource() {
 		if (currentLevel.getId() == 1) {
 			return new AssetLevelSource(getGDActivity(), "levels.mrg");
 		}
-		logDebug("LevelsManager.getCurrentLevelSource: id > 1 not yet wired (commit 3); falling back to assets");
-		return null;
+		return new DocumentLevelSource(storage, currentLevel.getId());
+	}
+
+	public LevelStorage getStorage() {
+		return storage;
 	}
 
 	private boolean mrgIsAvailable(long id) {
 		if (id == 1) // This is default built-in levels.mrg
 			return true;
 
-		File file = getMrgFileById(id);
-		return isExternalStorageReadable() && file.exists();
+		// Pre-SAF: this checked external storage state + file.exists() on a
+		// raw /storage/emulated/0/GDLevels path. Now: ask the storage layer
+		// — false if no folder picked or {id}.mrg isn't there.
+		return storage.hasLevel(id);
 	}
 
 	public boolean isDbOK() {
@@ -179,8 +173,10 @@ public class LevelsManager {
 			throw new Exception(getString(R.string.e_cannot_save_level));
 		}
 
-		File newFile = getMrgFileById(id);
-		copy(file, newFile);
+		// Copy the downloaded temp file into the SAF-backed user folder as
+		// {id}.mrg. The source `file` is still a regular File (cache dir);
+		// only the destination is via ContentResolver.
+		copyToStorage(file, id);
 
 		return id;
 	}
@@ -264,11 +260,8 @@ public class LevelsManager {
 
 	public void delete(Level level) {
 		dataSource.deleteLevel(level);
-		File file = getMrgFileById(level.getId());
 		try {
-			if (file.exists()) {
-				file.delete();
-			}
+			storage.deleteLevel(level.getId());
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -294,14 +287,23 @@ public class LevelsManager {
 
 	public void downloadLevel(final Level level, final Callback successCallback) {
 		final GDActivity gd = getGDActivity();
+
+		// First, make sure we have a SAF folder to write into. If not, ask
+		// the user to pick one — the activity launches the picker and
+		// re-invokes this method via the callback once the URI is persisted.
+		gd.requestLevelsFolderIfNeeded(new Runnable() {
+			@Override
+			public void run() {
+				doDownloadLevel(level, successCallback);
+			}
+		});
+	}
+
+	private void doDownloadLevel(final Level level, final Callback successCallback) {
+		final GDActivity gd = getGDActivity();
 		File outputDir = gd.getCacheDir();
 
 		try {
-			boolean readable = isExternalStorageReadable();
-			if (!readable) {
-				throw new Exception(getString(R.string.e_external_storage_is_not_readable));
-			}
-
 			if (!isOnline()) {
 				throw new Exception(getString(R.string.e_no_network_connection));
 			}
@@ -436,58 +438,34 @@ public class LevelsManager {
 		logDebug("Level#1: " + dataSource.getLevel(1));
 	}
 
-	public static boolean isExternalStorageWritable() {
-		String state = Environment.getExternalStorageState();
-		if (Environment.MEDIA_MOUNTED.equals(state)) {
-			return true;
-		}
-		return false;
-	}
-
-	public static boolean isExternalStorageReadable() {
-		String state = Environment.getExternalStorageState();
-		if (Environment.MEDIA_MOUNTED.equals(state) ||
-				Environment.MEDIA_MOUNTED_READ_ONLY.equals(state)) {
-			return true;
-		}
-		return false;
-	}
-
-	public static File getLevelsDirectory() {
-		File file = new File(Environment.getExternalStorageDirectory(), "GDLevels");
-		if (!file.mkdirs()) {
-			logDebug("LevelsManager.getLevelsDirectory: directory not created");
-		}
-		return file;
-	}
-
-	public static String getMrgFileNameById(long id) {
-		return getLevelsDirectory().getAbsolutePath() + "/" + id + ".mrg";
-	}
-
-	public static File getMrgFileById(long id) {
-		if (id == 1) return null;
-		return new File(getMrgFileNameById(id));
-	}
-
-	public static void copy(File src, File dst) throws IOException {
+	/**
+	 * Copy a regular {@link File} (cache-dir temp from the downloader) into
+	 * the SAF-backed user folder as {@code {id}.mrg}.
+	 */
+	private void copyToStorage(File src, long id) throws IOException {
 		InputStream in = new FileInputStream(src);
-		OutputStream out = new FileOutputStream(dst);
-
-		byte[] buf = new byte[1024];
-		int len;
-		while ((len = in.read(buf)) > 0) {
-			out.write(buf, 0, len);
+		OutputStream out = storage.createLevel(id);
+		try {
+			byte[] buf = new byte[8192];
+			int len;
+			while ((len = in.read(buf)) > 0) {
+				out.write(buf, 0, len);
+			}
+		} finally {
+			try { in.close(); } catch (IOException ignore) {}
+			try { out.close(); } catch (IOException ignore) {}
 		}
-
-		in.close();
-		out.close();
 	}
 
+	/**
+	 * Pre-SAF this used {@code StatFs} on the GDLevels directory. With SAF
+	 * there's no clean way to inspect free space on the chosen tree (the
+	 * URI may not even resolve to a real path on the local filesystem).
+	 * Stubbed to {@code true}; an out-of-space write will surface as an
+	 * {@link IOException} from the actual download/copy.
+	 */
 	public static boolean isSpaceAvailable(long bytes) {
-		StatFs stat = new StatFs(getLevelsDirectory().getPath());
-		long bytesAvailable = (long) stat.getBlockSize() * (long) stat.getAvailableBlocks();
-		return bytesAvailable >= bytes;
+		return true;
 	}
 
 	private class AsyncDeleteLevel extends AsyncTask<Level, Void, Void> {

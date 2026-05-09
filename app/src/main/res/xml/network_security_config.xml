@@ -2,13 +2,19 @@
 <!--
     Cleartext HTTP is denied by default since API 28. The legacy level
     server (gdtr.net) only serves plaintext HTTP, so we narrowly permit
-    cleartext for those two hosts only. Everything else stays HTTPS-only.
+    cleartext for that domain and its subdomains. Everything else stays
+    HTTPS-only.
+
+    Why includeSubdomains: the API response points downloads at
+    static.gdtr.net (different host than the API.java URL constants),
+    and there may be more subdomains we haven't discovered yet. One
+    entry covers gdtr.net, dev.gdtr.net, static.gdtr.net, and anything
+    future.
 
     See API/API.java for the URLs (URL, DEBUG_URL, MRG_URL).
 -->
 <network-security-config>
     <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">gdtr.net</domain>
-        <domain includeSubdomains="false">dev.gdtr.net</domain>
+        <domain includeSubdomains="true">gdtr.net</domain>
     </domain-config>
 </network-security-config>

@@ -1,9 +1,7 @@
 package org.happysanta.gd;
 
 import android.app.Activity;
-import android.app.AlarmManager;
 import android.app.AlertDialog;
-import android.app.PendingIntent;
 import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -28,6 +26,7 @@ import org.happysanta.gd.Menu.Views.MenuTextView;
 import org.happysanta.gd.Menu.Views.MenuTitleLinearLayout;
 import org.happysanta.gd.Menu.Views.ObservableScrollView;
 import org.happysanta.gd.Storage.LevelsManager;
+import org.happysanta.gd.Storage.LevelStorage;
 // Installation is in this same package (org.happysanta.gd) — no import needed.
 // Originally org.acra.util.Installation, replaced when ACRA was dropped.
 import org.json.JSONObject;
@@ -95,6 +94,12 @@ public class GDActivity extends Activity implements Runnable {
 	private MenuTextView portedTextView;
 	private int buttonHeight = 60;
 	public LevelsManager levelsManager;
+
+	// SAF folder picker plumbing — see requestLevelsFolderIfNeeded() and
+	// onActivityResult() below. Plain Activity has no ActivityResultLauncher,
+	// so we use the legacy startActivityForResult / onActivityResult flow.
+	private static final int RC_PICK_LEVELS_FOLDER = 0x6FD1; // arbitrary
+	private Runnable pendingFolderPickedCallback;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -736,6 +741,40 @@ public class GDActivity extends Activity implements Runnable {
 		Helpers.logDebug("@@@ [GDActivity " + hashCode() + "] onRestart()");
 	}
 
+	/**
+	 * Make sure the SAF levels folder is picked, then run {@code onReady}.
+	 * If the user has already picked a folder in a prior session, the
+	 * callback runs immediately. Otherwise we launch the system folder
+	 * picker and run the callback once the URI is persisted.
+	 *
+	 * <p>Cancelling the picker drops the callback silently.
+	 */
+	public void requestLevelsFolderIfNeeded(Runnable onReady) {
+		LevelStorage storage = levelsManager.getStorage();
+		if (storage.hasLocation()) {
+			onReady.run();
+			return;
+		}
+		pendingFolderPickedCallback = onReady;
+		startActivityForResult(LevelStorage.createPickerIntent(), RC_PICK_LEVELS_FOLDER);
+	}
+
+	@Override
+	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+		super.onActivityResult(requestCode, resultCode, data);
+		if (requestCode != RC_PICK_LEVELS_FOLDER) return;
+
+		Runnable callback = pendingFolderPickedCallback;
+		pendingFolderPickedCallback = null;
+
+		if (resultCode != RESULT_OK || data == null || data.getData() == null) {
+			// User cancelled or system returned no URI — no further action.
+			return;
+		}
+		levelsManager.getStorage().setLocation(data.getData());
+		if (callback != null) callback.run();
+	}
+
 	@Override
 	public void onBackPressed() {
 		if (gameView != null && menu != null && inited) {
@@ -1098,11 +1137,14 @@ public class GDActivity extends Activity implements Runnable {
 	}
 
 	private void doRestartApp() {
-		Intent mStartActivity = new Intent(this, GDActivity.class);
-		int mPendingIntentId = 123456;
-		PendingIntent mPendingIntent = PendingIntent.getActivity(this, mPendingIntentId, mStartActivity, PendingIntent.FLAG_CANCEL_CURRENT);
-		AlarmManager mgr = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
-		mgr.set(AlarmManager.RTC, System.currentTimeMillis() + 100, mPendingIntent);
+		// Old code scheduled an AlarmManager + PendingIntent to relaunch the activity 100ms
+		// after finish(). On modern Android (12+) inexact alarms from background apps are
+		// heavily throttled and frequently never fire — symptom: app exits, never restarts.
+		// Plain startActivity() with NEW_TASK | CLEAR_TASK works synchronously and is what
+		// the AlarmManager hack was emulating anyway.
+		Intent restart = new Intent(this, GDActivity.class);
+		restart.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+		startActivity(restart);
 	}
 
 	private void sendStats() {

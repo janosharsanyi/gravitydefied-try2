@@ -1495,50 +1495,16 @@ public class Menu
 	}*/
 
 	public void installFromFileBrowse() {
-		if (!LevelsManager.isExternalStorageReadable()) {
-			showAlert(getString(R.string.error), getString(R.string.e_external_storage_is_not_readable), null);
-			return;
-		}
-
-		final GDActivity gd = getGDActivity();
-		FileDialog fileDialog = new FileDialog(gd, Environment.getExternalStorageDirectory(), ".mrg");
-		fileDialog.addFileListener(new FileDialog.FileSelectedListener() {
-			public void fileSelected(final File file) {
-				final EditText input = new EditText(gd);
-				input.setInputType(InputType.TYPE_CLASS_TEXT);
-
-				AlertDialog.Builder alert = new AlertDialog.Builder(gd)
-						.setTitle(getString(R.string.enter_levels_name_title))
-						.setMessage(getString(R.string.enter_levels_name))
-						.setView(input)
-						.setPositiveButton(getString(R.string.ok), new DialogInterface.OnClickListener() {
-							public void onClick(DialogInterface dialog, int whichButton) {
-								boolean ok = true;
-								String name = input.getText().toString();
-								if (name.equals("")) name = file.getName();
-
-								ProgressDialog progressDialog = ProgressDialog.show(gd, getString(R.string.install), getString(R.string.installing), true);
-
-								try {
-									gd.levelsManager.install(file, name, "", 0);
-								} catch (Exception e) {
-									ok = false;
-									e.printStackTrace();
-									showAlert(getString(R.string.error), e.getMessage(), null);
-								} finally {
-									progressDialog.dismiss();
-								}
-
-								if (ok) {
-									gd.levelsManager.showSuccessfullyInstalledDialog();
-								}
-							}
-						})
-						.setNegativeButton(getString(R.string.cancel), null);
-				alert.show();
-			}
-		});
-		fileDialog.showDialog();
+		// Pre-scoped-storage this opened a custom FileDialog rooted at
+		// Environment.getExternalStorageDirectory() — both that root and
+		// the homemade browser are blocked on modern Android. The proper
+		// replacement is ACTION_OPEN_DOCUMENT (single-file SAF picker)
+		// returning a content:// Uri that we read via ContentResolver.
+		// Tracked in MIGRATION_PLAN.md under "Restore manual .mrg install
+		// via SAF". Until then, point the user at the in-app downloader.
+		showAlert(getString(R.string.oops),
+				"Manual .mrg install isn't ported yet.\n\nUse \"Download mods\" instead.",
+				null);
 	}
 
 	public static boolean isNameCheat(byte[] chars) {
