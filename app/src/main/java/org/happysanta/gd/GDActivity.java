@@ -14,6 +14,7 @@ import android.os.Bundle;
 import android.text.Html;
 import android.view.*;
 import android.widget.FrameLayout;
+import androidx.core.view.WindowInsetsCompat;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -182,7 +183,12 @@ public class GDActivity extends Activity implements Runnable {
 		if (true) {
 			gameView = new GameView(this);
 
-			getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+			// Edge-to-edge is enforced for targetSdk >= 35, so the activity
+			// draws under the system bars by default. The original code used
+			// the deprecated FLAG_FULLSCREEN (status bar only); we keep the
+			// nav bar visible and instead inset the root content view by the
+			// system bar insets (see frame setup below) so neither game nor
+			// menus draw under status / nav bars.
 
 			scrollView = new ObservableScrollView(this);
 			scrollView.setBackgroundColor(0x00ffffff);
@@ -204,6 +210,16 @@ public class GDActivity extends Activity implements Runnable {
 
 			frame = new FrameLayout(this);
 			frame.setBackgroundColor(0xffffffff);
+
+			// Inset the root frame by the system bars so neither game nor
+			// menus draw under the status bar (top) or nav bar (bottom).
+			// Required since edge-to-edge is enforced for targetSdk >= 35.
+			androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(frame, (v, insets) -> {
+				androidx.core.graphics.Insets bars =
+						insets.getInsets(WindowInsetsCompat.Type.systemBars());
+				v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+				return insets;
+			});
 
 			titleLayout = new MenuTitleLinearLayout(this);
 			titleLayout.setBackgroundColor(0x00ffffff);
