@@ -66,6 +66,18 @@ public class GDActivity extends ComponentActivity implements Runnable {
 	public boolean alive = false;
 	public boolean m_cZ = true;
 	private boolean menuShown = false;
+	/**
+	 * Back-press callback registered with {@link androidx.activity.OnBackPressedDispatcher}.
+	 * We toggle its {@code enabled} flag in {@link #updateBackCallbackEnabled()}:
+	 * disabled at the main menu so the system handles back natively (we get
+	 * the OS predictive-back peek animation and a standard activity finish);
+	 * enabled everywhere else so we intercept and navigate within the menu.
+	 * The "abrupt exit" that used to result at root is mitigated by hooking
+	 * {@link #onPause()} — when {@code isFinishing()}, we kick off the
+	 * legacy game-loop drain immediately so cleanup happens during the
+	 * predictive-back animation rather than after.
+	 */
+	private OnBackPressedCallback backCallback;
 	public boolean fullResetting = false;
 	public boolean exiting = false;
 
@@ -143,9 +155,27 @@ public class GDActivity extends ComponentActivity implements Runnable {
 		// Modern back-press handling. Replaces the deprecated
 		// Activity.onBackPressed() override and lets us drop the
 		// `enableOnBackInvokedCallback="false"` opt-out from the manifest.
-		// Behavior is preserved: back is always consumed (the user exits via
-		// the in-menu Exit Game item), so the callback stays enabled.
-		getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+		//
+		// Enabled state is toggled by {@link #updateBackCallbackEnabled()}:
+		// disabled at the main menu so the system handles back natively
+		// (we get the OS predictive-back peek animation, drawn against
+		// whatever activity is behind ours), enabled elsewhere so we
+		// intercept and navigate within the menu / open the in-game menu.
+		//
+		// We deliberately do NOT implement the progress callbacks
+		// (handleOnBackStarted/Progressed/Cancelled). Overriding any of
+		// them would make this callback consume the gesture even at root,
+		// which suppresses the system peek animation. The only way to keep
+		// the system animation is to not intercept.
+		//
+		// The "abrupt exit" that used to result from system-direct finish()
+		// is mitigated in onPause(): when isFinishing() we kick off the
+		// legacy game-loop drain immediately so resource cleanup runs
+		// concurrently with the OS predictive-back animation, not after.
+		//
+		// Initial state: enabled — pre-init back presses get swallowed
+		// (same as the old override), since there's no game/menu state.
+		backCallback = new OnBackPressedCallback(true) {
 			@Override
 			public void handleOnBackPressed() {
 				if (gameView != null && menu != null && inited) {
@@ -156,7 +186,8 @@ public class GDActivity extends ComponentActivity implements Runnable {
 				}
 				// Pre-init: swallow silently — same as the old override.
 			}
-		});
+		};
+		getOnBackPressedDispatcher().addCallback(this, backCallback);
 
 		if (Helpers.isSDK10OrLower()) {
 			isNormalAndroid = false;
@@ -784,6 +815,20 @@ public class GDActivity extends ComponentActivity implements Runnable {
 		// if (menu != null)
 		// 	menu.saveAll();
 		// levelsManager.updateLevelSettings();
+
+		// Activity is going away (back at main menu, or someone else
+		// called finish()). Kick off the legacy graceful exit chain NOW
+		// rather than waiting for onDestroy. Reason: when the system
+		// handles back at root it draws the predictive-back peek
+		// animation between onPause and onDestroy — running cleanup here
+		// means resource teardown overlaps the animation, instead of the
+		// activity window snapping away with a still-active game thread
+		// behind it. By the time onDestroy fires, destroyApp is a no-op
+		// (wasDestroyed=true), so nothing runs twice.
+		if (isFinishing()) {
+			exiting = true;
+			destroyApp(false);
+		}
 	}
 
 	@Override
@@ -1204,6 +1249,7 @@ public class GDActivity extends ComponentActivity implements Runnable {
 			showKeyboardLayout();
 
 		gameToMenuUpdateUi();
+		updateBackCallbackEnabled();
 	}
 
 	// @UiThread
@@ -1235,8 +1281,35 @@ public class GDActivity extends ComponentActivity implements Runnable {
 		// menu.showKeyboard();
 
 		menuToGameUpdateUi();
+		updateBackCallbackEnabled();
 
 		keyboardController.clearLogBuffer();
+	}
+
+	/**
+	 * Recompute the back callback's {@code enabled} state from current UI
+	 * context. Disabled only at the main menu (so the system runs back
+	 * natively, drawing the predictive-back peek animation and finishing
+	 * the activity); enabled everywhere else so we intercept back to
+	 * navigate within the menu or open the in-game menu. Called from
+	 * {@link #gameToMenu()}, {@link #menuToGame()}, and
+	 * {@link Menu#setCurrentMenu(MenuScreen, boolean)} whenever the inputs
+	 * change.
+	 *
+	 * <p>Always posts to the UI thread because
+	 * {@link OnBackPressedCallback#setEnabled(boolean)} is {@code @MainThread}
+	 * and our callers (the game thread, etc.) aren't all on it.
+	 */
+	public void updateBackCallbackEnabled() {
+		if (backCallback == null) return;
+		runOnUiThread(new Runnable() {
+			@Override
+			public void run() {
+				if (backCallback == null) return;
+				boolean atRoot = inited && menuShown && menu != null && menu.isAtMainMenu();
+				backCallback.setEnabled(!atRoot);
+			}
+		});
 	}
 
 	// @UiThread

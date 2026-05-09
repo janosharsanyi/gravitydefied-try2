@@ -988,6 +988,16 @@ public class Menu
 		return currentMenu;
 	}
 
+	/**
+	 * True when the user is on the top-level main menu. Used by
+	 * {@link GDActivity#updateBackCallbackEnabled()} to decide whether to
+	 * intercept the back press (sub-menu / in-game) or let the system
+	 * handle it natively (main menu → predictive back + activity finish).
+	 */
+	public boolean isAtMainMenu() {
+		return currentMenu == mainMenu;
+	}
+
 	public void setCurrentMenu(MenuScreen newMenu, boolean flag) {
 		menuDisabled = false;
 		GDActivity gd = getGDActivity();
@@ -1039,6 +1049,11 @@ public class Menu
 		m_blZ = false;
 
 		// */
+
+		// Re-evaluate whether the system or our callback handles back.
+		// At the main menu we want the system to handle it (predictive
+		// back peek + native finish); elsewhere we intercept to navigate.
+		gd.updateBackCallbackEnabled();
 	}
 
 	public void showHighScoreMenu(int league) {
