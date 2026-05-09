@@ -1,6 +1,5 @@
 package org.happysanta.gd;
 
-import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.Context;
@@ -14,6 +13,8 @@ import android.provider.OpenableColumns;
 import android.text.Html;
 import android.view.*;
 import android.widget.FrameLayout;
+import androidx.activity.ComponentActivity;
+import androidx.activity.OnBackPressedCallback;
 import androidx.core.view.WindowInsetsCompat;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -43,7 +44,7 @@ import java.util.HashMap;
 
 import static org.happysanta.gd.Helpers.logDebug;
 
-public class GDActivity extends Activity implements Runnable {
+public class GDActivity extends ComponentActivity implements Runnable {
 
 	public static GDActivity shared = null;
 	public static final int MENU_TITLE_LAYOUT_TOP_PADDING = 25;
@@ -138,6 +139,24 @@ public class GDActivity extends Activity implements Runnable {
 		super.onCreate(savedInstanceState);
 
 		shared = this;
+
+		// Modern back-press handling. Replaces the deprecated
+		// Activity.onBackPressed() override and lets us drop the
+		// `enableOnBackInvokedCallback="false"` opt-out from the manifest.
+		// Behavior is preserved: back is always consumed (the user exits via
+		// the in-menu Exit Game item), so the callback stays enabled.
+		getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+			@Override
+			public void handleOnBackPressed() {
+				if (gameView != null && menu != null && inited) {
+					if (menuShown)
+						menu.back();
+					else
+						gameView.showMenu();
+				}
+				// Pre-init: swallow silently — same as the old override.
+			}
+		});
 
 		if (Helpers.isSDK10OrLower()) {
 			isNormalAndroid = false;
@@ -965,16 +984,6 @@ public class GDActivity extends Activity implements Runnable {
 			}
 		}
 		return temp;
-	}
-
-	@Override
-	public void onBackPressed() {
-		if (gameView != null && menu != null && inited) {
-			if (menuShown)
-				menu.back();
-			else
-				gameView.showMenu();
-		}
 	}
 
 	@Override
