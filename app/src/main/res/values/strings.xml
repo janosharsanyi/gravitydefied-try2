@@ -59,6 +59,7 @@
 	<string name="stick_layout">Stick layout</string>
 	<string name="stick_invert">Stick invert</string>
 	<string name="stick_axis_flip">Stick X/Y swap</string>
+	<string name="button_ab_swap">Swap A/B buttons</string>
 	<string name="immersive_mode">Immersive mode</string>
 	<string name="dark_mode">Dark mode</string>
 	<string name="clear_highscore">Clear highscore</string>

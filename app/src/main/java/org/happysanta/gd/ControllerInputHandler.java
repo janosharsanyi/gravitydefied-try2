@@ -192,27 +192,28 @@ public class ControllerInputHandler {
                 handleButton(code, brakeKey(), down);
                 return true;
             case KeyEvent.KEYCODE_BUTTON_A:
-                // Menu: A = select (FIRE). Game: A = accelerate.
-                handleButton(code, gd.isMenuShown() ? MENU_KEY_FIRE : accelKey(), down);
-                return true;
-            case KeyEvent.KEYCODE_BUTTON_B:
-                // Menu: B = back (momentary, no held key). Game: B = brake.
-                if (gd.isMenuShown()) {
-                    if (down) {
-                        gd.controllerBackPress();
-                    } else {
-                        // A B-press recorded in-game (brake) can have its
-                        // matching release land here if the user paused
-                        // mid-brake. Drain the held entry so the engine
-                        // doesn't sit with m_LaZ[brakeKey]=true forever.
-                        // No-op if no in-game press was recorded for B.
-                        Integer prev = heldByButton.remove(code);
-                        if (prev != null && prev != 0) sendKey(prev, false);
-                    }
+            case KeyEvent.KEYCODE_BUTTON_B: {
+                // Resolve the *logical* role of this physical button via the
+                // swap setting, then route to the handler for that role.
+                // Critically, heldByButton is keyed on the physical code in
+                // both roles — so press/release pairing is anchored to the
+                // physical button, not the logical one. If the user toggles
+                // the swap setting between a press and its matching release
+                // (vanishingly rare with controller input but possible if
+                // they pause, navigate to options, and toggle while still
+                // physically holding), the release still finds the entry
+                // the press recorded under the same physical key, and the
+                // J2ME key stored at press time gets retracted cleanly. No
+                // stuck key, no double-fire.
+                boolean swap = Settings.isButtonAbSwapEnabled();
+                boolean isLogicalA = (code == KeyEvent.KEYCODE_BUTTON_A) ^ swap;
+                if (isLogicalA) {
+                    handleLogicalA(code, down);
                 } else {
-                    handleButton(code, brakeKey(), down);
+                    handleLogicalB(code, down);
                 }
                 return true;
+            }
             case KeyEvent.KEYCODE_BUTTON_START:
             case KeyEvent.KEYCODE_MENU:
                 // Same as system back: in-game opens the menu, in-menu pops
@@ -649,6 +650,41 @@ public class ControllerInputHandler {
         float scaled = (abs - deadzone) / (1f - deadzone);
         if (scaled > 1f) scaled = 1f;
         return v >= 0 ? scaled : -scaled;
+    }
+
+    /**
+     * Logical-A handler: press = select in menu / accelerate in game.
+     * Held-key tracking is done by the caller-supplied {@code controllerCode}
+     * (always the physical keycode), so the matching release retracts the
+     * J2ME key recorded at press time even if the swap setting flipped
+     * between the press and release.
+     */
+    private void handleLogicalA(int controllerCode, boolean down) {
+        // Menu: A = select (FIRE). Game: A = accelerate.
+        handleButton(controllerCode, gd.isMenuShown() ? MENU_KEY_FIRE : accelKey(), down);
+    }
+
+    /**
+     * Logical-B handler: press = back in menu (momentary, no held key) /
+     * brake in game. Same physical-keycode invariant as
+     * {@link #handleLogicalA}.
+     */
+    private void handleLogicalB(int controllerCode, boolean down) {
+        if (gd.isMenuShown()) {
+            if (down) {
+                gd.controllerBackPress();
+            } else {
+                // A logical-B press recorded in-game (brake) can have its
+                // matching release land here if the user paused mid-brake.
+                // Drain the held entry so the engine doesn't sit with
+                // m_LaZ[brakeKey]=true forever. No-op if no in-game press
+                // was recorded for this physical button.
+                Integer prev = heldByButton.remove(controllerCode);
+                if (prev != null && prev != 0) sendKey(prev, false);
+            }
+        } else {
+            handleButton(controllerCode, brakeKey(), down);
+        }
     }
 
     /**

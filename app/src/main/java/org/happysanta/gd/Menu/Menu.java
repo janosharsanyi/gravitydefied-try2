@@ -88,6 +88,7 @@ public class Menu
 	private OptionsMenuElement stickInvertOptionItem;
 	private OptionsMenuElement stickAxisFlipOptionItem;
 	private OptionsMenuElement stickDeadzoneOptionItem;
+	private OptionsMenuElement buttonAbSwapOptionItem;
 	private OptionsMenuElement immersiveModeOptionItem;
 	private OptionsMenuElement darkModeOptionItem;
 	private OptionsMenuElement vibrateOnTouchOptionItem;
@@ -422,6 +423,7 @@ public class Menu
 				stickInvertOptionItem = new OptionsMenuElement(getString(R.string.stick_invert), Settings.getStickInvert(), this, stickLrStrings, false, optionsMenu);
 				stickAxisFlipOptionItem = new OptionsMenuElement(getString(R.string.stick_axis_flip), Settings.getStickAxisFlip(), this, stickLrStrings, false, optionsMenu);
 				stickDeadzoneOptionItem = new OptionsMenuElement(getString(R.string.stick_deadzone), stickDeadzoneIndexFromPct(Settings.getStickDeadzonePct()), this, stickDeadzoneStrings, false, optionsMenu);
+				buttonAbSwapOptionItem = new OptionsMenuElement(getString(R.string.button_ab_swap), Settings.isButtonAbSwapEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				immersiveModeOptionItem = new OptionsMenuElement(getString(R.string.immersive_mode), Settings.isImmersiveModeEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				darkModeOptionItem = new OptionsMenuElement(getString(R.string.dark_mode), Settings.isDarkModeEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				clearHighscoreOptionItem = new SimpleMenuElementNew(getString(R.string.clear_highscore), eraseScreen, this);
@@ -444,6 +446,7 @@ public class Menu
 				optionsMenu.addItem(stickInvertOptionItem);
 				optionsMenu.addItem(stickAxisFlipOptionItem);
 				optionsMenu.addItem(stickDeadzoneOptionItem);
+				optionsMenu.addItem(buttonAbSwapOptionItem);
 				optionsMenu.addItem(immersiveModeOptionItem);
 				optionsMenu.addItem(darkModeOptionItem);
 				optionsMenu.addItem(clearHighscoreOptionItem);
@@ -1232,6 +1235,12 @@ public class Menu
 
 		if (item == vibrateOnTouchOptionItem) {
 			Settings.setVibrateOnTouchEnabled(((OptionsMenuElement) item).getSelectedOption() == 0);
+		}
+		if (item == buttonAbSwapOptionItem) {
+			// ControllerInputHandler reads Settings.isButtonAbSwapEnabled()
+			// per dispatchKey call, so no notify is needed — the next A/B
+			// press picks up the new mapping.
+			Settings.setButtonAbSwapEnabled(((OptionsMenuElement) item).getSelectedOption() == 0);
 		}
 		if (item == keyboardInMenuOptionItem) {
 			boolean enabled = ((OptionsMenuElement) item).getSelectedOption() == 0;

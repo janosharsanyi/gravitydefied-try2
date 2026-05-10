@@ -188,6 +188,17 @@ public class Settings {
 	private static final String STICK_AXIS_FLIP = "stick_axis_flip";
 	private static final int STICK_AXIS_FLIP_DEFAULT = STICK_AXIS_FLIP_NONE;
 
+	// Swap the A and B controller buttons. Default mapping: in menu A =
+	// select (FIRE), B = back; in game A = accelerate, B = brake.
+	// With this on: A and B trade roles in both contexts (menu A = back,
+	// B = select; game A = brake, B = accelerate). Useful for users on
+	// pads with Nintendo-style A/B placement, or who simply prefer the
+	// alternate ergonomics. Affects only KEYCODE_BUTTON_A / _BUTTON_B
+	// dispatch in ControllerInputHandler — the d-pad, sticks, START and
+	// MENU paths are unchanged.
+	private static final String BUTTON_AB_SWAP_ENABLED = "button_ab_swap_enabled";
+	private static final boolean BUTTON_AB_SWAP_ENABLED_DEFAULT = false;
+
 	// Hide the status bar while the activity is in the foreground. The nav
 	// bar stays visible (separate concern; deferred). With
 	// BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE the user can swipe from the
@@ -245,6 +256,7 @@ public class Settings {
 		setStickLayout(STICK_LAYOUT_DEFAULT);
 		setStickInvert(STICK_INVERT_DEFAULT);
 		setStickAxisFlip(STICK_AXIS_FLIP_DEFAULT);
+		setButtonAbSwapEnabled(BUTTON_AB_SWAP_ENABLED_DEFAULT);
 		setImmersiveModeEnabled(IMMERSIVE_MODE_ENABLED_DEFAULT);
 		setDarkModeEnabled(DARK_MODE_ENABLED_DEFAULT);
 		setInputOption(INPUT_OPTION_DEFAULT);
@@ -432,6 +444,14 @@ public class Settings {
 
 	public static void setStickAxisFlip(int flip) {
 		setInt(STICK_AXIS_FLIP, flip);
+	}
+
+	public static boolean isButtonAbSwapEnabled() {
+		return preferences.getBoolean(BUTTON_AB_SWAP_ENABLED, BUTTON_AB_SWAP_ENABLED_DEFAULT);
+	}
+
+	public static void setButtonAbSwapEnabled(boolean enabled) {
+		setBoolean(BUTTON_AB_SWAP_ENABLED, enabled);
 	}
 
 	public static boolean isImmersiveModeEnabled() {
