@@ -3,9 +3,11 @@ package org.happysanta.gd.Menu;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.res.ColorStateList;
 import android.view.View;
 import android.widget.RelativeLayout;
 import android.widget.Toast;
+import androidx.core.widget.ImageViewCompat;
 import org.happysanta.gd.API.*;
 import org.happysanta.gd.GDActivity;
 import org.happysanta.gd.Menu.Views.MenuImageView;
@@ -42,6 +44,10 @@ public class DownloadLevelsMenuScreen extends LevelsMenuScreen {
 		// Sort icon
 		sortImage = new MenuImageView(context);
 		sortImage.setImageResource(R.drawable.ic_sort);
+		// Tint to track menu fg so the dark glyph stays visible on the
+		// dark-mode title bar; re-applied in onShow() for theme toggles.
+		ImageViewCompat.setImageTintList(sortImage,
+				ColorStateList.valueOf(Settings.getMenuFgColor()));
 		sortImage.setAdjustViewBounds(true);
 		sortImage.setOnClickListener(new View.OnClickListener() {
 			@Override
@@ -201,6 +207,11 @@ public class DownloadLevelsMenuScreen extends LevelsMenuScreen {
 		super.onShow();
 
 		GDActivity activity = getGDActivity();
+
+		// Re-apply tint so a dark-mode toggle taken on another screen
+		// is reflected the next time the sort icon comes back up.
+		ImageViewCompat.setImageTintList(sortImage,
+				ColorStateList.valueOf(Settings.getMenuFgColor()));
 
 		activity.titleLayout.addView(sortImage);
 		sortImage.setVisibility(View.VISIBLE);

@@ -304,6 +304,26 @@ public class ControllerInputHandler {
         final boolean invertR = (invert == Settings.STICK_INVERT_RIGHT)
                 || (invert == Settings.STICK_INVERT_ALL);
 
+        // Whether the throttle channel ends up reading from a physical X
+        // axis (rather than the default Y). Default mapping has throttle
+        // on Y; a flip on the throttle-providing stick swaps it to X.
+        // Used at the sign step below: Y is +down so throttle = -ay
+        // (user-natural up=accel), but X is +right so flipped throttle
+        // = +ax (user-natural right=accel). Without this, flipping the
+        // throttle stick produces stick-right=brake, which combined with
+        // Invert just to fix it is a UX trap.
+        final boolean throttleFromX;
+        if (layout == Settings.STICK_LAYOUT_SINGLE) {
+            // Single stick (L) drives both axes; flipL swaps which feeds throttle.
+            throttleFromX = flipL;
+        } else if (layout == Settings.STICK_LAYOUT_DUAL_LEAN_LEFT) {
+            // R drives throttle; flipR swaps R's axes.
+            throttleFromX = flipR;
+        } else { // STICK_LAYOUT_DUAL_THROTTLE_LEFT
+            // L drives throttle; flipL swaps L's axes.
+            throttleFromX = flipL;
+        }
+
         float leanComponent;
         float throttleComponent;
         if (layout == Settings.STICK_LAYOUT_SINGLE) {
@@ -351,12 +371,16 @@ public class ControllerInputHandler {
             }
         } else {
             // Right stick axes vary by pad — auto-resolve per device so
-            // both common conventions work without user calibration.
+            // both common conventions work without user calibration. If
+            // the pad has no right stick at all (e.g. single-stick pad
+            // with triggers on Z/RZ), resolveRightStickAxes returns
+            // sentinel -1 entries; treat those as 0 so trigger pressure
+            // can't leak into the throttle/lean channel.
             int[] rightAxes = resolveRightStickAxes(event.getDevice());
             float lx = event.getAxisValue(MotionEvent.AXIS_X);
             float ly = event.getAxisValue(MotionEvent.AXIS_Y);
-            float rx = event.getAxisValue(rightAxes[0]);
-            float ry = event.getAxisValue(rightAxes[1]);
+            float rx = rightAxes[0] >= 0 ? event.getAxisValue(rightAxes[0]) : 0f;
+            float ry = rightAxes[1] >= 0 ? event.getAxisValue(rightAxes[1]) : 0f;
             // Layout decides which stick drives which physics axis; flip
             // decides which physical axis on that stick to read. Default
             // physical axis is X for lean (the lateral motion), Y for
@@ -409,8 +433,12 @@ public class ControllerInputHandler {
 
         // Sign convention: physics expects positive throttle = accel and
         // positive lean = forward (right). Android stick Y is +down, so
-        // throttle = -y. Stick X is +right, so lean = +x.
-        int throttleSignedI = (int) (-throttleComponent * 0x10000);
+        // throttle = -y when reading the Y axis; X is +right, so a flipped
+        // throttle (reading X) needs +x to keep right=accel natural. Lean
+        // defaults to +x; if a flip moved lean to Y, the user can compose
+        // Invert to taste — leaving the lean sign alone preserves the
+        // existing behaviour for the unflipped path.
+        int throttleSignedI = (int) ((throttleFromX ? throttleComponent : -throttleComponent) * 0x10000);
         int leanSignedI     = (int) ( leanComponent * 0x10000);
 
         gd.gameView.setAnalogInput(throttleSignedI, leanSignedI);
@@ -424,8 +452,14 @@ public class ControllerInputHandler {
      *  and a few put unipolar trigger pressure on Z/RZ — so we pick the pair
      *  the device declares as bipolar (range crosses zero with non-trivial
      *  extent). Result is cached per {@link InputDevice#getId()} on first
-     *  call. Defaults to Z/RZ if the device is null or exposes neither pair
-     *  as a stick. */
+     *  call.
+     *
+     *  <p>If neither pair is bipolar (single-stick pad, or trigger pressure
+     *  on Z/RZ with no right stick wired up), returns the sentinel
+     *  {@code {-1, -1}} — the caller must read 0 for those axes rather than
+     *  calling {@code event.getAxisValue(-1)}. This avoids the failure mode
+     *  where pulling a trigger on a single-stick pad in a dual layout
+     *  silently drove the bike. */
     private int[] resolveRightStickAxes(InputDevice device) {
         if (device == null) {
             return new int[]{MotionEvent.AXIS_Z, MotionEvent.AXIS_RZ};
@@ -447,11 +481,9 @@ public class ControllerInputHandler {
         } else if (rPair) {
             result = new int[]{MotionEvent.AXIS_RX, MotionEvent.AXIS_RY};
         } else {
-            // Pad doesn't expose a clean right-stick pair (single-stick
-            // controller, or weird wiring). Fall back to the default — the
-            // dispatch will read 0s on those axes, which is "centered" and
-            // therefore inert.
-            result = new int[]{MotionEvent.AXIS_Z, MotionEvent.AXIS_RZ};
+            // No bipolar pair — sentinel signals "no right stick on this
+            // pad". dispatchAnalogStick reads 0 instead of querying these.
+            result = new int[]{-1, -1};
         }
         rightStickAxesByDevice.put(key, result);
         return result;

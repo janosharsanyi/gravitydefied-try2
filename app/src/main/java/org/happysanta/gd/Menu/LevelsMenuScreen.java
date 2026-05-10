@@ -11,6 +11,7 @@ import android.widget.TextView;
 import org.happysanta.gd.GDActivity;
 import org.happysanta.gd.Menu.Views.MenuLinearLayout;
 import org.happysanta.gd.R;
+import org.happysanta.gd.Settings;
 import org.happysanta.gd.Storage.Level;
 import org.happysanta.gd.Storage.LevelsManager;
 
@@ -29,8 +30,6 @@ import static org.happysanta.gd.Helpers.logDebug;
 public class LevelsMenuScreen extends MenuScreen {
 
 	enum Statuses {NORMAL, DOWNLOADING, ERROR}
-
-	protected final static int ERROR_COLOR = 0xff777777;
 
 	protected Statuses status = Statuses.NORMAL;
 	protected int savedScrollY = 0;
@@ -68,7 +67,10 @@ public class LevelsMenuScreen extends MenuScreen {
 		errorText = new TextMenuElement(getString(R.string.download_error));
 		TextView errorTextView = (TextView) errorText.getView();
 
-		errorTextView.setTextColor(ERROR_COLOR);
+		// Track theme so the "cannot download levels list" message reads
+		// correctly on a dark sky; re-applied in onShow() in case the user
+		// toggled dark mode while another screen was up.
+		errorTextView.setTextColor(Settings.getMenuFgColor());
 		errorTextView.setLayoutParams(new LinearLayout.LayoutParams(
 				LinearLayout.LayoutParams.MATCH_PARENT,
 				LinearLayout.LayoutParams.MATCH_PARENT
@@ -204,6 +206,10 @@ public class LevelsMenuScreen extends MenuScreen {
 	public void onShow() {
 		super.onShow();
 		GDActivity activity = getGDActivity();
+
+		// Re-apply theme-tracked error text color in case dark mode
+		// was toggled while a different screen was up.
+		((TextView) errorText.getView()).setTextColor(Settings.getMenuFgColor());
 
 		if (leftFromScreen) {
 			clearList();
