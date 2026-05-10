@@ -61,6 +61,15 @@ public class Settings {
 	private static final String CONTROLLER_AUTOHIDE_TIMEOUT_SEC = "controller_autohide_timeout_sec";
 	private static final int CONTROLLER_AUTOHIDE_TIMEOUT_SEC_DEFAULT = CONTROLLER_AUTOHIDE_ALWAYS;
 
+	// Hide the status bar while the activity is in the foreground. The nav
+	// bar stays visible (separate concern; deferred). With
+	// BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE the user can swipe from the
+	// top to peek the bar back. Default off — preserve the original
+	// "system bars visible" feel; users who want a more fullscreen game
+	// can opt in.
+	private static final String IMMERSIVE_MODE_ENABLED = "immersive_mode_enabled";
+	private static final boolean IMMERSIVE_MODE_ENABLED_DEFAULT = false;
+
 	private static final String LAST_SEND_STATS = "last_send_stats";
 	private static final long LAST_SEND_STATS_DEFAULT = 0;
 
@@ -87,6 +96,7 @@ public class Settings {
 		setKeyboardInMenuEnabled(KEYBOARD_IN_MENU_ENABLED_DEFAULT);
 		setKeypadLandscapeSide(KEYPAD_LANDSCAPE_SIDE_DEFAULT);
 		setControllerAutoHideTimeoutSec(CONTROLLER_AUTOHIDE_TIMEOUT_SEC_DEFAULT);
+		setImmersiveModeEnabled(IMMERSIVE_MODE_ENABLED_DEFAULT);
 		setInputOption(INPUT_OPTION_DEFAULT);
 		setLevelsSort(LEVELS_SORT_DEFAULT);
 		setName(NAME_CHARS_DEFALUT);
@@ -162,6 +172,14 @@ public class Settings {
 
 	public static void setControllerAutoHideTimeoutSec(int seconds) {
 		setInt(CONTROLLER_AUTOHIDE_TIMEOUT_SEC, seconds);
+	}
+
+	public static boolean isImmersiveModeEnabled() {
+		return preferences.getBoolean(IMMERSIVE_MODE_ENABLED, IMMERSIVE_MODE_ENABLED_DEFAULT);
+	}
+
+	public static void setImmersiveModeEnabled(boolean enabled) {
+		setBoolean(IMMERSIVE_MODE_ENABLED, enabled);
 	}
 
 	public static boolean isVibrateOnTouchEnabled() {

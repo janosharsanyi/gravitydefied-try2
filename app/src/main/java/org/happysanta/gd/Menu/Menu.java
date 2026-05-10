@@ -82,6 +82,7 @@ public class Menu
 	private OptionsMenuElement keyboardInMenuOptionItem;
 	private OptionsMenuElement keypadLandscapeSideOptionItem;
 	private OptionsMenuElement controllerAutohideOptionItem;
+	private OptionsMenuElement immersiveModeOptionItem;
 	private OptionsMenuElement vibrateOnTouchOptionItem;
 	private SimpleMenuElementNew clearHighscoreOptionItem;
 	private SimpleMenuElementNew fullResetItem;
@@ -394,6 +395,7 @@ public class Menu
 				keyboardInMenuOptionItem = new OptionsMenuElement(getString(R.string.keyboard_in_menu), Settings.isKeyboardInMenuEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				keypadLandscapeSideOptionItem = new OptionsMenuElement(getString(R.string.keypad_landscape_side), Settings.getKeypadLandscapeSide(), this, keypadSideStrings, false, optionsMenu);
 				controllerAutohideOptionItem = new OptionsMenuElement(getString(R.string.controller_autohide), controllerAutohideIndexFromSeconds(Settings.getControllerAutoHideTimeoutSec()), this, controllerAutohideStrings, false, optionsMenu);
+				immersiveModeOptionItem = new OptionsMenuElement(getString(R.string.immersive_mode), Settings.isImmersiveModeEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				clearHighscoreOptionItem = new SimpleMenuElementNew(getString(R.string.clear_highscore), eraseScreen, this);
 
 				// if (hasPointer)
@@ -408,6 +410,7 @@ public class Menu
 				optionsMenu.addItem(keyboardInMenuOptionItem);
 				optionsMenu.addItem(keypadLandscapeSideOptionItem);
 				optionsMenu.addItem(controllerAutohideOptionItem);
+				optionsMenu.addItem(immersiveModeOptionItem);
 				optionsMenu.addItem(clearHighscoreOptionItem);
 				optionsMenu.addItem(createAction(ActionMenuElement.BACK));
 
@@ -1160,6 +1163,11 @@ public class Menu
 			Settings.setKeyboardInMenuEnabled(enabled);
 			if (enabled) gd.showKeyboardLayout();
 			else gd.hideKeyboardLayout();
+		}
+		if (item == immersiveModeOptionItem) {
+			boolean enabled = ((OptionsMenuElement) item).getSelectedOption() == 0;
+			Settings.setImmersiveModeEnabled(enabled);
+			gd.applyImmersiveMode();
 		}
 		if (item == controllerAutohideOptionItem) {
 			// Click cycles through the 5 timeout choices (Never/5/10/15/30s).

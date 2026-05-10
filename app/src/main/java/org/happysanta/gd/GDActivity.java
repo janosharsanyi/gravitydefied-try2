@@ -18,7 +18,9 @@ import android.widget.FrameLayout;
 
 import androidx.activity.ComponentActivity;
 import androidx.activity.OnBackPressedCallback;
+import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -413,6 +415,10 @@ public class GDActivity extends ComponentActivity implements Runnable {
             frame.addView(gameView, 0);
 
             setContentView(frame);
+
+            // Apply user's immersive-mode preference now that the window
+            // has a content view (insets controller needs a target view).
+            applyImmersiveMode();
 
             gameView._doIV(1); // flag for 1st image, as I understand..
             thread = null;
@@ -1313,6 +1319,41 @@ public class GDActivity extends ComponentActivity implements Runnable {
      */
     public void controllerBackPress() {
         getOnBackPressedDispatcher().onBackPressed();
+    }
+
+    /**
+     * Apply the user's "Immersive mode" preference to the window's status
+     * bar. When enabled we hide just the status bar (nav bar stays — that's
+     * a separate, deferred concern) with
+     * {@link WindowInsetsControllerCompat#BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE}
+     * so a swipe from the top peeks the bar back without permanently
+     * un-hiding it. When disabled we show the status bar.
+     *
+     * <p>The root frame's inset listener (set up in {@link #onCreate}) keys
+     * off {@link WindowInsetsCompat.Type#systemBars()}, which the platform
+     * automatically reports as zero for hidden bars — so toggling
+     * visibility here is sufficient; no inset-listener change is needed.
+     *
+     * <p>Safe to call from any thread; the underlying controller calls run
+     * on the UI thread.
+     */
+    public void applyImmersiveMode() {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                View decor = getWindow().getDecorView();
+                WindowInsetsControllerCompat controller =
+                        WindowCompat.getInsetsController(getWindow(), decor);
+                if (controller == null) return;
+                if (Settings.isImmersiveModeEnabled()) {
+                    controller.setSystemBarsBehavior(
+                            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                    controller.hide(WindowInsetsCompat.Type.statusBars());
+                } else {
+                    controller.show(WindowInsetsCompat.Type.statusBars());
+                }
+            }
+        });
     }
 
     /**

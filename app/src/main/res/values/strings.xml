@@ -53,6 +53,7 @@
 	<string name="keyboard_in_menu">Keyboard in menu</string>
 	<string name="keypad_landscape_side">Keypad side (landscape)</string>
 	<string name="controller_autohide">Auto-hide keypad after</string>
+	<string name="immersive_mode">Immersive mode</string>
 	<string name="clear_highscore">Clear highscore</string>
 	<string name="full_reset">Full Reset</string>
 	<string name="reset">Reset</string>

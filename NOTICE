@@ -58,6 +58,12 @@ Input
   user setting "Auto-hide keypad after" (Always / Immediately / 5/10/15/30s)
   driven by a touch-idle timer.
 
+Display
+- Added optional "Immersive mode" setting that hides the status bar (nav bar
+  unaffected) via WindowInsetsControllerCompat with
+  BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE so users can swipe to peek the bar
+  back. Default off.
+
 Other
 - Cosmetic / clarity comments added at sites where an API change forced a
   code change, noting the old call and why it changed (helps cross-checking
