@@ -411,7 +411,12 @@ public class GameView extends View {
 	}
 
 	private float offsetY(float j) {
-		return -j + m_BI - getGDActivity().getButtonsLayoutHeight() / 2;
+		// Compensate for the keypad's vertical footprint at the centre of
+		// the screen — full strip height in portrait, zero in landscape
+		// where the split keypad leaves the bottom centre clear. Old code
+		// used getButtonsLayoutHeight() unconditionally, which left the
+		// bike top-shifted by ~105dp in landscape.
+		return -j + m_BI - getGDActivity().getPlayfieldBottomReservation() / 2;
 	}
 
 	public void _newvV() {

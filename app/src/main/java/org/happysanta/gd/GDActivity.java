@@ -1161,6 +1161,30 @@ public class GDActivity extends ComponentActivity implements Runnable {
         return buttonHeight * 3 + KeyboardController.PADDING * 2;
     }
 
+    /**
+     * How much vertical space at the bottom of the screen the on-screen
+     * keypad reserves *along the playfield's centre line* — i.e. how far
+     * the playfield's vertical centring should be shifted up to keep the
+     * bike out from under the keypad.
+     *
+     * <ul>
+     *   <li>Portrait: full keypad-strip height. The keypad spans the
+     *       whole bottom edge, so the centre column loses that much.</li>
+     *   <li>Landscape (split-keypad mode): 0. The two clusters dock into
+     *       the bottom-left and bottom-right corners with the centre
+     *       bottom intentionally clear, so the bike's vertical path is
+     *       unblocked and no compensation is needed.</li>
+     * </ul>
+     *
+     * <p>This is what {@code GameView.offsetY()} should subtract to
+     * vertically centre the bike in the actually-visible playfield.
+     */
+    public int getPlayfieldBottomReservation() {
+        boolean landscape = getResources().getConfiguration().orientation
+                == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        return landscape ? 0 : getButtonsLayoutHeight();
+    }
+
     public boolean isKeyboardLayoutVisible() {
         return keyboardLayout != null
                 && keyboardLayout.getVisibility() == android.view.View.VISIBLE;
