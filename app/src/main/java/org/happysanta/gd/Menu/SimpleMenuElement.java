@@ -10,6 +10,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import org.happysanta.gd.Global;
 import org.happysanta.gd.Menu.Views.MenuTextView;
+import org.happysanta.gd.Settings;
 
 import java.util.TimerTask;
 
@@ -61,7 +62,7 @@ public class SimpleMenuElement extends TimerTask
 
 		textView = new MenuTextView(getGDActivity());
 		textView.setText(text);
-		textView.setTextColor(0xff000000);
+		textView.setTextColor(Settings.getMenuFgColor());
 		// textView.setTextColor(R.drawable.menu_item_color);
 		textView.setTypeface(Global.robotoCondensedTypeface);
 		textView.setTextSize(20);

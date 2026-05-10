@@ -324,7 +324,10 @@ public class GDActivity extends ComponentActivity implements Runnable {
             scrollView.setVisibility(View.GONE);
 
             frame = new FrameLayout(this);
-            frame.setBackgroundColor(0xffffffff);
+            // Light/dark menu chrome — Settings.getMenuBgColor() picks
+            // white or black based on the dark-mode toggle. Re-applied on
+            // toggle via applyDarkMode().
+            frame.setBackgroundColor(Settings.getMenuBgColor());
 
             // Inset the root frame by the system bars so neither game nor
             // menus draw under the status bar (top) or nav bar (bottom).
@@ -344,7 +347,7 @@ public class GDActivity extends ComponentActivity implements Runnable {
 
             menuTitleTextView = new TextView(this);
             menuTitleTextView.setText(getString(R.string.main));
-            menuTitleTextView.setTextColor(0xff000000);
+            menuTitleTextView.setTextColor(Settings.getMenuFgColor());
             menuTitleTextView.setTypeface(Global.robotoCondensedTypeface);
             menuTitleTextView.setTextSize(MENU_TITLE_FONT_SIZE);
             menuTitleTextView.setLineSpacing(0f, 1.1f);
@@ -419,6 +422,10 @@ public class GDActivity extends ComponentActivity implements Runnable {
             // Apply user's immersive-mode preference now that the window
             // has a content view (insets controller needs a target view).
             applyImmersiveMode();
+            // Re-apply dark-mode tint to the system bars now that the
+            // insets controller is reachable. Frame bg + menu title color
+            // were already set with the dark-mode-aware values above.
+            applyDarkMode();
 
             gameView._doIV(1); // flag for 1st image, as I understand..
             thread = null;
@@ -1357,6 +1364,110 @@ public class GDActivity extends ComponentActivity implements Runnable {
     }
 
     /**
+     * Apply the current dark-mode setting to the live UI: root frame
+     * background, menu title text color, system-bar icon appearance, and
+     * any TextViews currently mounted under the scroll view (so the
+     * Options screen the user is on flips immediately rather than after
+     * navigating away and back).
+     *
+     * <p>The in-game canvas reads {@link Settings#getMenuBgColor()} every
+     * frame, so it picks up the change on its own — no invalidate call
+     * needed here.
+     *
+     * <p>Safe to call from any thread.
+     */
+    public void applyDarkMode() {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                int bg = Settings.getMenuBgColor();
+                int fg = Settings.getMenuFgColor();
+                if (frame != null) frame.setBackgroundColor(bg);
+                if (menuTitleTextView != null) menuTitleTextView.setTextColor(fg);
+                // Walk every known menu screen's layout, not just the one
+                // currently mounted — each MenuScreen caches its own
+                // LinearLayout with TextViews that hold a frozen
+                // ColorStateList from creation time. Without this, screens
+                // the user hasn't visited since the toggle (Main, Play,
+                // etc.) keep the old text color.
+                if (menu != null) menu.refreshAllScreenColors();
+                // Rebuild the keypad if it was already constructed — its
+                // row backgrounds and digit text are baked in at build time
+                // (TextView.setTextColor takes a frozen color, not a source
+                // we can repaint). rebuildKeypad() tears down and recreates
+                // the cluster views from buildClusterView() which now reads
+                // Settings.getKeypadRowBgColor / getKeypadTextColor.
+                if (keyboardLayout != null) {
+                    rebuildKeypad();
+                }
+                // Tint system bar icons so they stay readable on the new
+                // background. Light bg → dark icons; dark bg → light icons.
+                View decor = getWindow().getDecorView();
+                WindowInsetsControllerCompat controller =
+                        WindowCompat.getInsetsController(getWindow(), decor);
+                if (controller != null) {
+                    boolean lightBars = !Settings.isDarkModeEnabled();
+                    controller.setAppearanceLightStatusBars(lightBars);
+                    controller.setAppearanceLightNavigationBars(lightBars);
+                }
+            }
+        });
+    }
+
+    /**
+     * Recursively re-color any TextView under {@code root} that currently
+     * carries the "old" foreground color (either pure black or pure white).
+     * MenuTextViews using a ColorStateList get a fresh state list from
+     * {@link Settings#getMenuItemColorStateList()}; plain TextViews with a
+     * solid color get the new {@link Settings#getMenuFgColor()}.
+     *
+     * <p>Best-effort: rows whose text was set with a special color (e.g.
+     * the grey "missing" tint on {@code LevelMenuElement}) are left alone
+     * because their solid color won't equal black or white.
+     *
+     * <p>Public so {@link org.happysanta.gd.Menu.Menu#refreshAllScreenColors()}
+     * can apply the same walk to every known menu screen — not just the
+     * one currently mounted under {@code scrollView}. Without that, screens
+     * the user hasn't visited yet (e.g. Main, Play) keep the cached
+     * ColorStateList from before the dark-mode toggle.
+     */
+    public void repaintMenuTextViews(View root, int fg) {
+        if (root instanceof org.happysanta.gd.Menu.Views.MenuTextView) {
+            org.happysanta.gd.Menu.Views.MenuTextView mtv =
+                    (org.happysanta.gd.Menu.Views.MenuTextView) root;
+            // MenuTextViews built from defaultColorStateList() carry a
+            // multi-state list; refresh that. Plain solid-color ones we
+            // only touch if they look like the previous default (pure
+            // black or white) so we don't clobber e.g. the grey "missing"
+            // color on LevelMenuElement.
+            android.content.res.ColorStateList csl = mtv.getTextColors();
+            if (csl != null && !csl.isStateful()) {
+                int curr = csl.getDefaultColor();
+                if (curr == 0xff000000 || curr == 0xffffffff) {
+                    mtv.setTextColor(fg);
+                }
+            } else {
+                mtv.setTextColor(Settings.getMenuItemColorStateList());
+            }
+            return;
+        }
+        if (root instanceof TextView) {
+            TextView tv = (TextView) root;
+            int curr = tv.getCurrentTextColor();
+            if (curr == 0xff000000 || curr == 0xffffffff) {
+                tv.setTextColor(fg);
+            }
+            return;
+        }
+        if (root instanceof android.view.ViewGroup) {
+            android.view.ViewGroup vg = (android.view.ViewGroup) root;
+            for (int i = 0; i < vg.getChildCount(); i++) {
+                repaintMenuTextViews(vg.getChildAt(i), fg);
+            }
+        }
+    }
+
+    /**
      * Build a single cluster sub-view from a {@code keys} grid of J2ME-style
      * key numbers (1-9; use 0 for "no key" cells, though no current cluster
      * uses that). The view is a vertical {@link LinearLayout} of horizontal
@@ -1383,15 +1494,16 @@ public class GDActivity extends ComponentActivity implements Runnable {
                     0);
             row.setOrientation(LinearLayout.HORIZONTAL);
             // Background ~60% white (was ~78% / 0xc6) — reduces how much of
-            // the playfield the keypad visually obscures.
-            row.setBackgroundColor(0x99ffffff);
+            // the playfield the keypad visually obscures. Pulled from
+            // Settings so dark mode flips it to ~60% black instead.
+            row.setBackgroundColor(Settings.getKeypadRowBgColor());
             for (int c = 0; c < cols; c++) {
                 int j2me = (c < keys[r].length) ? keys[r][c] : 0;
                 LinearLayout btn = new LinearLayout(this);
                 if (j2me >= 1 && j2me <= 9) {
                     TextView btnText = new TextView(this);
                     btnText.setText(String.valueOf(j2me));
-                    btnText.setTextColor(0xff000000);
+                    btnText.setTextColor(Settings.getKeypadTextColor());
                     btnText.setTextSize(17);
                     btn.setBackgroundResource(getResources().getIdentifier("btn_n", "drawable", getPackageName()));
                     btn.addView(btnText, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));

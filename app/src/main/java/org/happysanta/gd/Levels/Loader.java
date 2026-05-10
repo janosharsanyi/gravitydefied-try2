@@ -35,7 +35,11 @@ public class Loader {
 	public int m_dI;
 
 	private boolean perspectiveEnabled = true;
-	private boolean shadowsEnabled = true;
+	// One of Settings.SHADOW_MODE_*. OFF disables the shadow render entirely;
+	// SHADOW is the original gray fade; NEON_* picks a colored "anti-shadow"
+	// glow under the bike. Default mirrors the old behavior so the field has a
+	// sensible value before Settings is consulted.
+	private int shadowMode = org.happysanta.gd.Settings.SHADOW_MODE_SHADOW;
 	private int pointers[][] = new int[3][];
 	private int m_eaI = 0;
 	private int m_faI = 0;
@@ -229,8 +233,15 @@ public class Loader {
 		levels._aiV(j);
 	}
 
+	// 3-arg variant: kept for callers that don't have wheel info to share.
+	// Falls back to using body Y as the wheel-avg too — the neon path will
+	// then behave the same as it did before the wheel metric was added.
 	public void _aIIV(int j, int k, int i1) {
-		levels._aIIV(j + 0x18000 >> 1, k - 0x18000 >> 1, i1 >> 1);
+		_aIIV(j, k, i1, i1);
+	}
+
+	public void _aIIV(int j, int k, int i1, int wheelAvgY) {
+		levels._aIIV(j + 0x18000 >> 1, k - 0x18000 >> 1, i1 >> 1, wheelAvgY >> 1);
 		k >>= 1;
 		j >>= 1;
 		m_faI = m_faI >= levels.pointsCount - 1 ? levels.pointsCount - 1 : m_faI;
@@ -321,8 +332,20 @@ public class Loader {
 		return byte1;
 	}
 
+	// True when *any* shadow style is selected (classic gray Shadow or one of
+	// the colored neons). Level._aiIV uses this as the gate before invoking
+	// the shadow render; the per-pixel color decision happens in _ifiIV based
+	// on getShadowMode().
 	public boolean isShadowsEnabled() {
-		return shadowsEnabled;
+		return shadowMode != org.happysanta.gd.Settings.SHADOW_MODE_OFF;
+	}
+
+	public int getShadowMode() {
+		return shadowMode;
+	}
+
+	public void setShadowMode(int mode) {
+		shadowMode = mode;
 	}
 
 	public boolean isPerspectiveEnabled() {
@@ -331,10 +354,6 @@ public class Loader {
 
 	public void setPerspectiveEnabled(boolean enabled) {
 		perspectiveEnabled = enabled;
-	}
-
-	public void setShadowsEnabled(boolean enabled) {
-		shadowsEnabled = enabled;
 	}
 
 }

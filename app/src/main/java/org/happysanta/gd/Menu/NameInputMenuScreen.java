@@ -9,6 +9,7 @@ import android.widget.TextView;
 import org.happysanta.gd.Global;
 import org.happysanta.gd.Menu.Views.MenuLinearLayout;
 import org.happysanta.gd.Menu.Views.MenuTextView;
+import org.happysanta.gd.Settings;
 
 import static org.happysanta.gd.Helpers.getDp;
 import static org.happysanta.gd.Helpers.getGDActivity;
@@ -67,7 +68,7 @@ public class NameInputMenuScreen extends MenuScreen {
 	protected MenuTextView createTextView() {
 		Context context = getGDActivity();
 		MenuTextView textView = new MenuTextView(context);
-		textView.setTextColor(0xff000000);
+		textView.setTextColor(Settings.getMenuFgColor());
 		textView.setTypeface(Global.robotoCondensedTypeface);
 		textView.setTextSize(ClickableMenuElement.TEXT_SIZE);
 		textView.setLayoutParams(new LinearLayout.LayoutParams(

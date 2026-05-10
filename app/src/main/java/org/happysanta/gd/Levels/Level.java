@@ -2,6 +2,7 @@ package org.happysanta.gd.Levels;
 
 import org.happysanta.gd.Game.GameView;
 import org.happysanta.gd.Game.Physics;
+import org.happysanta.gd.Settings;
 
 import java.io.DataInputStream;
 
@@ -26,6 +27,13 @@ public class Level {
 	private int m_bI;
 	private int m_gI;
 	private int m_rI;
+	// Average wheel Y, fed in alongside m_gI (body Y). Drives the neon
+	// "proximity" metric so the glow follows the bike's *underside* rather
+	// than its body — when the bike flips upside-down, wheels point up and
+	// the neon correctly fades, even though the body is still near ground.
+	// Classic shadow keeps using m_gI / m_rI so its behavior matches upstream.
+	private int m_wheelAvgY;
+	private int m_rI_neon;
 
 	public Level() {
 		m_aI = 0;
@@ -74,34 +82,99 @@ public class Level {
 		m_gI = i1;
 	}
 
-	public void _ifiIV(GameView view, int k, int i1) {
-		if (i1 <= pointsCount - 1) {
-			int j1 = m_gI - (points[k][1] + points[i1 + 1][1] >> 1) >= 0 ? m_gI - (points[k][1] + points[i1 + 1][1] >> 1) : 0;
-			if (m_gI <= points[k][1] || m_gI <= points[i1 + 1][1])
-				j1 = j1 >= 0x50000 ? 0x50000 : j1;
-			m_rI = (int) ((long) m_rI * 49152L >> 16) + (int) ((long) j1 * 16384L >> 16);
-			if (m_rI <= 0x88000) {
-				int k1 = (int) (0x190000L * (long) m_rI >> 16) >> 16;
-				view.setColor(k1, k1, k1);
-				int l1 = points[k][0] - points[k + 1][0];
-				int i2 = (int) (((long) (points[k][1] - points[k + 1][1]) << 32) / (long) l1 >> 16);
-				int j2 = points[k][1] - (int) ((long) points[k][0] * (long) i2 >> 16);
-				int k2 = (int) ((long) m_eI * (long) i2 >> 16) + j2;
-				l1 = points[i1][0] - points[i1 + 1][0];
-				i2 = (int) (((long) (points[i1][1] - points[i1 + 1][1]) << 32) / (long) l1 >> 16);
-				j2 = points[i1][1] - (int) ((long) points[i1][0] * (long) i2 >> 16);
-				int l2 = (int) ((long) m_bI * (long) i2 >> 16) + j2;
-				if (k == i1) {
-					view._aIIIV((m_eI << 3) >> 16, (k2 + 0x10000 << 3) >> 16, (m_bI << 3) >> 16, (l2 + 0x10000 << 3) >> 16);
-					return;
-				}
-				view._aIIIV((m_eI << 3) >> 16, (k2 + 0x10000 << 3) >> 16, (points[k + 1][0] << 3) >> 16, (points[k + 1][1] + 0x10000 << 3) >> 16);
-				for (int i3 = k + 1; i3 < i1; i3++)
-					view._aIIIV((points[i3][0] << 3) >> 16, (points[i3][1] + 0x10000 << 3) >> 16, (points[i3 + 1][0] << 3) >> 16, (points[i3 + 1][1] + 0x10000 << 3) >> 16);
+	// Variant that also captures the average wheel Y for the neon proximity
+	// metric. Existing 3-arg call site stays valid for callers that don't
+	// have wheel info to share.
+	public void _aIIV(int j, int k, int i1, int wheelAvgY) {
+		_aIIV(j, k, i1);
+		m_wheelAvgY = wheelAvgY;
+	}
 
-				view._aIIIV((points[i1][0] << 3) >> 16, (points[i1][1] + 0x10000 << 3) >> 16, (m_bI << 3) >> 16, (l2 + 0x10000 << 3) >> 16);
+	public void _ifiIV(GameView view, int k, int i1) {
+		if (i1 > pointsCount - 1) return;
+
+		int midground = points[k][1] + points[i1 + 1][1] >> 1;
+
+		// Body proximity (drives classic shadow). Same logic as upstream.
+		int j1 = m_gI - midground >= 0 ? m_gI - midground : 0;
+		if (m_gI <= points[k][1] || m_gI <= points[i1 + 1][1])
+			j1 = j1 >= 0x50000 ? 0x50000 : j1;
+		m_rI = (int) ((long) m_rI * 49152L >> 16) + (int) ((long) j1 * 16384L >> 16);
+
+		// Wheel-avg proximity (drives neon). Same shape of computation, but
+		// using the wheel-pair midpoint — when the bike flips upside-down,
+		// wheels rise above the body and this metric grows accordingly, so
+		// the neon (which conceptually emits from the bike's underside)
+		// fades out instead of getting brighter as the body collapses to
+		// ground.
+		int j1n = m_wheelAvgY - midground >= 0 ? m_wheelAvgY - midground : 0;
+		if (m_wheelAvgY <= points[k][1] || m_wheelAvgY <= points[i1 + 1][1])
+			j1n = j1n >= 0x50000 ? 0x50000 : j1n;
+		m_rI_neon = (int) ((long) m_rI_neon * 49152L >> 16) + (int) ((long) j1n * 16384L >> 16);
+
+		int mode = getLevelLoader().getShadowMode();
+		boolean isNeon = mode > Settings.SHADOW_MODE_SHADOW;
+		boolean dark = Settings.isDarkModeEnabled();
+		// Light mode + neon: draw the classic shadow underneath as a base,
+		// then overlay the neon glow on top. Dark mode + neon: skip the
+		// shadow because in dark mode setColor inverts the near-black
+		// shadow color into a bright gray line, which fights the neon for
+		// attention. Pure SHADOW mode always draws just the shadow.
+		boolean drawShadow = (mode == Settings.SHADOW_MODE_SHADOW)
+				|| (isNeon && !dark);
+		boolean drawNeon = isNeon;
+
+		// Shape calculation — same line endpoints regardless of color, so
+		// compute once and stroke it once per active layer.
+		int l1 = points[k][0] - points[k + 1][0];
+		int i2 = (int) (((long) (points[k][1] - points[k + 1][1]) << 32) / (long) l1 >> 16);
+		int j2 = points[k][1] - (int) ((long) points[k][0] * (long) i2 >> 16);
+		int k2 = (int) ((long) m_eI * (long) i2 >> 16) + j2;
+		l1 = points[i1][0] - points[i1 + 1][0];
+		i2 = (int) (((long) (points[i1][1] - points[i1 + 1][1]) << 32) / (long) l1 >> 16);
+		j2 = points[i1][1] - (int) ((long) points[i1][0] * (long) i2 >> 16);
+		int l2 = (int) ((long) m_bI * (long) i2 >> 16) + j2;
+
+		if (drawShadow && m_rI <= 0x88000) {
+			int sk1 = (int) (0x190000L * (long) m_rI >> 16) >> 16;
+			view.setColor(sk1, sk1, sk1);
+			drawShadowSegments(view, k, i1, k2, l2);
+		}
+
+		if (drawNeon) {
+			int floor = Settings.SHADOW_NEON_FULL_BELOW;
+			int span = 0x88000 - floor;
+			int eff = m_rI_neon < floor ? floor : m_rI_neon;
+			// 16.16 fixed-point t to stay in step with surrounding code.
+			int t = span > 0 ? (int) (((long) (eff - floor) << 16) / (long) span) : 0;
+			if (t < 0) t = 0;
+			if (t > 0x10000) t = 0x10000;
+			int alpha = 0xff - (int) (((long) 0xff * t) >> 16);
+			if (alpha < 0) alpha = 0;
+			if (alpha > 0xff) alpha = 0xff;
+			if (alpha > 0) {
+				int base = Settings.getShadowNeonBaseColor(mode);
+				// setRawArgb bypasses the dark-mode remap in setColor so
+				// the neon hue passes through untouched and the alpha
+				// channel actually takes effect on the line stroke.
+				view.setRawArgb((alpha << 24) | (base & 0xffffff));
+				drawShadowSegments(view, k, i1, k2, l2);
 			}
 		}
+	}
+
+	// Stroke the shadow shape (one straight line, or a polyline following
+	// the track points between m_eI and m_bI). Pure rendering — color must
+	// already be set on the view before calling.
+	private void drawShadowSegments(GameView view, int k, int i1, int k2, int l2) {
+		if (k == i1) {
+			view._aIIIV((m_eI << 3) >> 16, (k2 + 0x10000 << 3) >> 16, (m_bI << 3) >> 16, (l2 + 0x10000 << 3) >> 16);
+			return;
+		}
+		view._aIIIV((m_eI << 3) >> 16, (k2 + 0x10000 << 3) >> 16, (points[k + 1][0] << 3) >> 16, (points[k + 1][1] + 0x10000 << 3) >> 16);
+		for (int i3 = k + 1; i3 < i1; i3++)
+			view._aIIIV((points[i3][0] << 3) >> 16, (points[i3][1] + 0x10000 << 3) >> 16, (points[i3 + 1][0] << 3) >> 16, (points[i3 + 1][1] + 0x10000 << 3) >> 16);
+		view._aIIIV((points[i1][0] << 3) >> 16, (points[i1][1] + 0x10000 << 3) >> 16, (m_bI << 3) >> 16, (l2 + 0x10000 << 3) >> 16);
 	}
 
 	public synchronized void _aiIV(GameView view, int k, int i1) {

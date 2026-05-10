@@ -11,6 +11,7 @@ import org.happysanta.gd.Global;
 import org.happysanta.gd.Menu.Views.MenuHelmetView;
 import org.happysanta.gd.Menu.Views.MenuTextView;
 import org.happysanta.gd.R;
+import org.happysanta.gd.Settings;
 
 import static org.happysanta.gd.Helpers.getDp;
 import static org.happysanta.gd.Helpers.getGDActivity;
@@ -132,7 +133,10 @@ public class ClickableMenuElement
 	}
 
 	protected ColorStateList defaultColorStateList() {
-		return getGDActivity().getResources().getColorStateList(R.drawable.menu_item_color);
+		// Was R.drawable.menu_item_color (XML selector). Switched to a
+		// programmatic ColorStateList so the default text color tracks the
+		// dark-mode setting at view-creation time.
+		return Settings.getMenuItemColorStateList();
 	}
 
 	@Override

@@ -853,7 +853,12 @@ public class Physics {
 		i1 = (i1 = m_Hak[1].m_ifan[j].x >= m_Hak[2].m_ifan[j].x ? m_Hak[1].m_ifan[j].x : m_Hak[2].m_ifan[j].x) >= m_Hak[5].m_ifan[j].x ? i1 : m_Hak[5].m_ifan[j].x;
 		int j1;
 		j1 = (j1 = m_Hak[1].m_ifan[j].x >= m_Hak[2].m_ifan[j].x ? m_Hak[2].m_ifan[j].x : m_Hak[1].m_ifan[j].x) >= m_Hak[5].m_ifan[j].x ? m_Hak[5].m_ifan[j].x : j1;
-		m_lf._aIIV(j1 - m_foraI[0], i1 + m_foraI[0], m_Hak[5].m_ifan[j].y);
+		// 4th arg = average of the two wheel Y positions; used by the neon
+		// shadow mode so the glow follows the bike's underside (orientation-
+		// aware) instead of the body, which collapses onto the ground when
+		// the bike crashes upside-down.
+		int wheelAvgY = m_Hak[1].m_ifan[j].y + m_Hak[2].m_ifan[j].y >> 1;
+		m_lf._aIIV(j1 - m_foraI[0], i1 + m_foraI[0], m_Hak[5].m_ifan[j].y, wheelAvgY);
 		int k1 = m_Hak[1].m_ifan[j].x - m_Hak[2].m_ifan[j].x;
 		int l1 = m_Hak[1].m_ifan[j].y - m_Hak[2].m_ifan[j].y;
 		int i2 = _doIII(k1, l1);

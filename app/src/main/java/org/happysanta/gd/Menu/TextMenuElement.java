@@ -12,6 +12,7 @@ import android.text.util.Linkify;
 import android.view.View;
 import android.view.ViewGroup;
 import org.happysanta.gd.Menu.Views.MenuTextView;
+import org.happysanta.gd.Settings;
 
 import static org.happysanta.gd.Helpers.getGDActivity;
 
@@ -19,7 +20,6 @@ public class TextMenuElement
 		implements MenuElement {
 
 	protected static final int TEXT_SIZE = 15;
-	protected static final int TEXT_COLOR = 0xff000000;
 
 	protected Spanned spanned;
 	protected MenuTextView textView;
@@ -39,7 +39,7 @@ public class TextMenuElement
 
 		MenuTextView textView = new MenuTextView(activity);
 		textView.setText(spanned);
-		textView.setTextColor(TEXT_COLOR);
+		textView.setTextColor(Settings.getMenuFgColor());
 		textView.setTextSize(TEXT_SIZE);
 		textView.setLineSpacing(0f, 1.5f);
 		textView.setLayoutParams(new ViewGroup.LayoutParams(

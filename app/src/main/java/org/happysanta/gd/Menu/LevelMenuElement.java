@@ -16,6 +16,7 @@ import org.happysanta.gd.Menu.Views.MenuLinearLayout;
 import org.happysanta.gd.Menu.Views.MenuRelativeLayout;
 import org.happysanta.gd.Menu.Views.MenuTextView;
 import org.happysanta.gd.R;
+import org.happysanta.gd.Settings;
 import org.happysanta.gd.Storage.Level;
 import org.happysanta.gd.Storage.LevelsManager;
 
@@ -83,7 +84,7 @@ public class LevelMenuElement
 		textView = new MenuTextView(context);
 		// textView.setText(level.getName());
 		updateNameLine();
-		textView.setTextColor(context.getResources().getColorStateList(R.drawable.menu_item_color));
+		textView.setTextColor(Settings.getMenuItemColorStateList());
 		textView.setTypeface(Global.robotoCondensedTypeface);
 		textView.setTextSize(NAME_SIZE);
 		textView.setLineSpacing(0f, 1.1f);
@@ -129,7 +130,7 @@ public class LevelMenuElement
 		if (missing) {
 			textView.setTextColor(MISSING_COLOR);
 		} else {
-			textView.setTextColor(getGDActivity().getResources().getColorStateList(R.drawable.menu_item_color));
+			textView.setTextColor(Settings.getMenuItemColorStateList());
 		}
 		/*} else {
 			textView.setTextOnUiThread(Html.fromHtml(String.format(getString(R.string.active_name_tpl), name)));

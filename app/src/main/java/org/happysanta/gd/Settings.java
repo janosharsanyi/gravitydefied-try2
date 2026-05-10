@@ -2,6 +2,7 @@ package org.happysanta.gd;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.res.ColorStateList;
 import android.os.Build;
 import org.happysanta.gd.API.API;
 
@@ -15,8 +16,33 @@ public class Settings {
 	private static final String PERSPECTIVE_ENABLED = "perspective_enabled";
 	private static final boolean PERSPECTIVE_ENABLED_DEFAULT = true;
 
-	private static final String SHADOWS_ENABLED = "shadows_enabled";
-	private static final boolean SHADOWS_ENABLED_DEFAULT = true;
+	// Driver shadow mode. The original game just had a boolean
+	// "shadows on/off" — we widen that to also offer a few "neon" modes
+	// that re-use the same render path but invert the brightness ramp:
+	// instead of fading in the shadow as the bike rises (close = dark,
+	// far = light gray) the neon modes fade *out* a glow under the bike
+	// (close = bright neon base, far = #363636). Mode 0 keeps "off",
+	// mode 1 is the original shadow; modes 2..7 are the neons. Default
+	// stays "Shadow" so existing players see no visible change.
+	public static final int SHADOW_MODE_OFF = 0;
+	public static final int SHADOW_MODE_SHADOW = 1;
+	public static final int SHADOW_MODE_NEON_YELLOW = 2;
+	public static final int SHADOW_MODE_NEON_RED = 3;
+	public static final int SHADOW_MODE_NEON_PURPLE = 4;
+	public static final int SHADOW_MODE_NEON_BLUE = 5;
+	public static final int SHADOW_MODE_NEON_CYAN = 6;
+	public static final int SHADOW_MODE_NEON_GREEN = 7;
+	private static final String SHADOW_MODE = "shadow_mode";
+	private static final int SHADOW_MODE_DEFAULT = SHADOW_MODE_SHADOW;
+	// Floor for the neon "proximity" metric. m_rI in Level._ifiIV measures
+	// bike-body distance above ground — but the body sits above the wheels
+	// by frame_height even when riding normally, and *collapses* to ~0 when
+	// the bike crashes flat / upside-down. Without a floor, a crashed bike
+	// reads as brighter than a normally-riding one. Clamping m_rI from below
+	// at this baseline means anything from "crashed flat" up to "wheels on
+	// ground" all render at max vibrancy; only true airtime starts the fade.
+	// Tuned by playtest — increase to widen the "max bright" band.
+	public static final int SHADOW_NEON_FULL_BELOW = 0x10000;
 
 	private static final String DRIVER_SPRITE_ENABLED = "driver_sprite_enabled";
 	private static final boolean DRIVER_SPRITE_ENABLED_DEFAULT = true;
@@ -70,6 +96,22 @@ public class Settings {
 	private static final String IMMERSIVE_MODE_ENABLED = "immersive_mode_enabled";
 	private static final boolean IMMERSIVE_MODE_ENABLED_DEFAULT = false;
 
+	// AMOLED-friendly dark mode: flips the menu chrome and in-game sky to
+	// pitch black (0x000000) and the menu text to white. The track and
+	// sprites still draw their own colors — only the empty space behind them
+	// goes black. Single source of truth: getMenuBgColor / getMenuFgColor /
+	// getMenuItemColorStateList. Default off — keep the original light look.
+	private static final String DARK_MODE_ENABLED = "dark_mode_enabled";
+	private static final boolean DARK_MODE_ENABLED_DEFAULT = false;
+	private static final int MENU_COLOR_LIGHT_BG = 0xffffffff;
+	private static final int MENU_COLOR_LIGHT_FG = 0xff000000;
+	private static final int MENU_COLOR_DARK_BG = 0xff000000;
+	private static final int MENU_COLOR_DARK_FG = 0xffffffff;
+	// Highlight color for pressed/focused/selected menu items — matches the
+	// original menu_item_color.xml selector. Same green works on both light
+	// and dark backgrounds.
+	private static final int MENU_HIGHLIGHT_COLOR = 0xff00a000;
+
 	private static final String LAST_SEND_STATS = "last_send_stats";
 	private static final long LAST_SEND_STATS_DEFAULT = 0;
 
@@ -88,7 +130,7 @@ public class Settings {
 
 	public static void resetAll() {
 		setPerspectiveEnabled(PERSPECTIVE_ENABLED_DEFAULT);
-		setShadowsEnabled(SHADOWS_ENABLED_DEFAULT);
+		setShadowMode(SHADOW_MODE_DEFAULT);
 		setDriverSpriteEnabled(DRIVER_SPRITE_ENABLED_DEFAULT);
 		setBikeSpriteEnabled(BIKE_SPRITE_ENABLED_DEFAULT);
 		setLookAheadEnabled(LOOK_AHEAD_ENABLED_DEFAULT);
@@ -97,6 +139,7 @@ public class Settings {
 		setKeypadLandscapeSide(KEYPAD_LANDSCAPE_SIDE_DEFAULT);
 		setControllerAutoHideTimeoutSec(CONTROLLER_AUTOHIDE_TIMEOUT_SEC_DEFAULT);
 		setImmersiveModeEnabled(IMMERSIVE_MODE_ENABLED_DEFAULT);
+		setDarkModeEnabled(DARK_MODE_ENABLED_DEFAULT);
 		setInputOption(INPUT_OPTION_DEFAULT);
 		setLevelsSort(LEVELS_SORT_DEFAULT);
 		setName(NAME_CHARS_DEFALUT);
@@ -118,12 +161,30 @@ public class Settings {
 		setBoolean(PERSPECTIVE_ENABLED, enabled);
 	}
 
-	public static boolean isShadowsEnabled() {
-		return preferences.getBoolean(SHADOWS_ENABLED, SHADOWS_ENABLED_DEFAULT);
+	public static int getShadowMode() {
+		int mode = preferences.getInt(SHADOW_MODE, SHADOW_MODE_DEFAULT);
+		if (mode < SHADOW_MODE_OFF || mode > SHADOW_MODE_NEON_GREEN)
+			return SHADOW_MODE_DEFAULT;
+		return mode;
 	}
 
-	public static void setShadowsEnabled(boolean enabled) {
-		setBoolean(SHADOWS_ENABLED, enabled);
+	public static void setShadowMode(int mode) {
+		setInt(SHADOW_MODE, mode);
+	}
+
+	// 0xRRGGBB base for a neon mode, or 0 if the mode is Off / classic Shadow
+	// (callers should special-case those before calling this). Centralized so
+	// the renderer and any future settings UI agree on the palette.
+	public static int getShadowNeonBaseColor(int mode) {
+		switch (mode) {
+			case SHADOW_MODE_NEON_YELLOW: return 0xffFDD449;
+			case SHADOW_MODE_NEON_RED:    return 0xffFD495B;
+			case SHADOW_MODE_NEON_PURPLE: return 0xffE749FD;
+			case SHADOW_MODE_NEON_BLUE:   return 0xff494BFD;
+			case SHADOW_MODE_NEON_CYAN:   return 0xff49FDE8;
+			case SHADOW_MODE_NEON_GREEN:  return 0xff54FD49;
+			default: return 0;
+		}
 	}
 
 	public static boolean isDriverSpriteEnabled() {
@@ -180,6 +241,59 @@ public class Settings {
 
 	public static void setImmersiveModeEnabled(boolean enabled) {
 		setBoolean(IMMERSIVE_MODE_ENABLED, enabled);
+	}
+
+	public static boolean isDarkModeEnabled() {
+		return preferences.getBoolean(DARK_MODE_ENABLED, DARK_MODE_ENABLED_DEFAULT);
+	}
+
+	public static void setDarkModeEnabled(boolean enabled) {
+		setBoolean(DARK_MODE_ENABLED, enabled);
+	}
+
+	// Single source of truth for the menu/in-game background color. Returns
+	// black when dark mode is on, white otherwise.
+	public static int getMenuBgColor() {
+		return isDarkModeEnabled() ? MENU_COLOR_DARK_BG : MENU_COLOR_LIGHT_BG;
+	}
+
+	// Single source of truth for the menu text/foreground color. Inverse of
+	// getMenuBgColor.
+	public static int getMenuFgColor() {
+		return isDarkModeEnabled() ? MENU_COLOR_DARK_FG : MENU_COLOR_LIGHT_FG;
+	}
+
+	// On-screen keypad row background. ~60% white in light mode (matches the
+	// original 0x99ffffff that reduces playfield obscuration); ~60% black in
+	// dark mode (mirrors the same translucency over the dark sky).
+	public static int getKeypadRowBgColor() {
+		return isDarkModeEnabled() ? 0x99000000 : 0x99ffffff;
+	}
+
+	// On-screen keypad button text color. Tracks getMenuFgColor so the
+	// digits stay legible against getKeypadRowBgColor in either theme.
+	public static int getKeypadTextColor() {
+		return getMenuFgColor();
+	}
+
+	// Programmatic replacement for the static R.drawable.menu_item_color
+	// selector — needed because the foreground color depends on dark mode
+	// and a static XML selector can't follow that. Highlight color is the
+	// same green in both modes.
+	public static ColorStateList getMenuItemColorStateList() {
+		int[][] states = new int[][]{
+				new int[]{android.R.attr.state_pressed},
+				new int[]{android.R.attr.state_focused},
+				new int[]{android.R.attr.state_selected},
+				new int[]{}
+		};
+		int[] colors = new int[]{
+				MENU_HIGHLIGHT_COLOR,
+				MENU_HIGHLIGHT_COLOR,
+				MENU_HIGHLIGHT_COLOR,
+				getMenuFgColor()
+		};
+		return new ColorStateList(states, colors);
 	}
 
 	public static boolean isVibrateOnTouchEnabled() {

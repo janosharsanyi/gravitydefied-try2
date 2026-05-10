@@ -74,7 +74,7 @@ public class Menu
 	private SimpleMenuElementNew highscoreItem;
 	private ActionMenuElement startItem;
 	private OptionsMenuElement perspectiveOptionItem;
-	private OptionsMenuElement shadowsOptionItem;
+	private OptionsMenuElement shadowModeOptionItem;
 	private OptionsMenuElement driverSpriteOptionItem;
 	private OptionsMenuElement bikeSpriteOptionItem;
 	private OptionsMenuElement inputOptionItem;
@@ -83,6 +83,7 @@ public class Menu
 	private OptionsMenuElement keypadLandscapeSideOptionItem;
 	private OptionsMenuElement controllerAutohideOptionItem;
 	private OptionsMenuElement immersiveModeOptionItem;
+	private OptionsMenuElement darkModeOptionItem;
 	private OptionsMenuElement vibrateOnTouchOptionItem;
 	private SimpleMenuElementNew clearHighscoreOptionItem;
 	private SimpleMenuElementNew fullResetItem;
@@ -142,6 +143,7 @@ public class Menu
 	private String[] keysetStrings = null;
 	private String[] keypadSideStrings = null;
 	private String[] controllerAutohideStrings = null;
+	private String[] shadowModeStrings = null;
 	// private EmptyLineMenuElement emptyLine;
 	// private EmptyLineMenuElement emptyLineBeforeAction;
 	// private AlertDialog alertDialog = null;
@@ -159,9 +161,10 @@ public class Menu
 	// public int helmetAngle;
 
 	public Menu() {
-		// Background color (instead of raster.png)
+		// Translucent scrim drawn over the game canvas while a menu is up.
+		// Color is recomputed each frame in drawBackgroundColor() so the
+		// dark-mode toggle takes effect without rebuilding the menu.
 		bgPaint = new Paint();
-		bgPaint.setColor(0x80FFFFFF);
 	}
 
 	public void load(int step) {
@@ -181,6 +184,7 @@ public class Menu
 				keysetStrings = getStringArray(R.array.keyset);
 				keypadSideStrings = getStringArray(R.array.keypad_side_options);
 				controllerAutohideStrings = getStringArray(R.array.controller_autohide_options);
+				shadowModeStrings = getStringArray(R.array.shadow_mode_options);
 				difficultyLevels = getStringArray(R.array.difficulty);
 
 				// saveManager = new SaveManager();
@@ -305,7 +309,7 @@ public class Menu
 					selectedTrack[level.getSelectedLevel()] = level.getSelectedTrack();
 				}
 				getLevelLoader().setPerspectiveEnabled(Settings.isPerspectiveEnabled());
-				getLevelLoader().setShadowsEnabled(Settings.isShadowsEnabled());
+				getLevelLoader().setShadowMode(Settings.getShadowMode());
 				activity.physEngine._ifZV(Settings.isLookAheadEnabled());
 				getGDView().setInputOption(Settings.getInputOption());
 				// getGDView()._aZV(m_aTB == 0);
@@ -386,7 +390,7 @@ public class Menu
 				// if (hasPointer)
 				// 	softwareJoystickOptionItem = new ActionMenuElement("Software Joystick", m_aTB, this, onOffStrings, true, activity, optionsMenu, false);
 				perspectiveOptionItem = new OptionsMenuElement(getString(R.string.perspective), Settings.isPerspectiveEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
-				shadowsOptionItem = new OptionsMenuElement(getString(R.string.shadows), Settings.isShadowsEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
+				shadowModeOptionItem = new OptionsMenuElement(getString(R.string.shadows), Settings.getShadowMode(), this, shadowModeStrings, false, optionsMenu);
 				driverSpriteOptionItem = new OptionsMenuElement(getString(R.string.driver_sprite), Settings.isDriverSpriteEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				bikeSpriteOptionItem = new OptionsMenuElement(getString(R.string.bike_sprite), Settings.isBikeSpriteEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				inputOptionItem = new OptionsMenuElement(getString(R.string.input), Settings.getInputOption(), this, keysetStrings, false, optionsMenu);
@@ -396,12 +400,13 @@ public class Menu
 				keypadLandscapeSideOptionItem = new OptionsMenuElement(getString(R.string.keypad_landscape_side), Settings.getKeypadLandscapeSide(), this, keypadSideStrings, false, optionsMenu);
 				controllerAutohideOptionItem = new OptionsMenuElement(getString(R.string.controller_autohide), controllerAutohideIndexFromSeconds(Settings.getControllerAutoHideTimeoutSec()), this, controllerAutohideStrings, false, optionsMenu);
 				immersiveModeOptionItem = new OptionsMenuElement(getString(R.string.immersive_mode), Settings.isImmersiveModeEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
+				darkModeOptionItem = new OptionsMenuElement(getString(R.string.dark_mode), Settings.isDarkModeEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				clearHighscoreOptionItem = new SimpleMenuElementNew(getString(R.string.clear_highscore), eraseScreen, this);
 
 				// if (hasPointer)
 				//	optionsMenu.addItem(softwareJoystickOptionItem);
 				optionsMenu.addItem(perspectiveOptionItem);
-				optionsMenu.addItem(shadowsOptionItem);
+				optionsMenu.addItem(shadowModeOptionItem);
 				optionsMenu.addItem(driverSpriteOptionItem);
 				optionsMenu.addItem(bikeSpriteOptionItem);
 				optionsMenu.addItem(inputOptionItem);
@@ -411,6 +416,7 @@ public class Menu
 				optionsMenu.addItem(keypadLandscapeSideOptionItem);
 				optionsMenu.addItem(controllerAutohideOptionItem);
 				optionsMenu.addItem(immersiveModeOptionItem);
+				optionsMenu.addItem(darkModeOptionItem);
 				optionsMenu.addItem(clearHighscoreOptionItem);
 				optionsMenu.addItem(createAction(ActionMenuElement.BACK));
 
@@ -926,6 +932,10 @@ public class Menu
 	}
 
 	private void drawBackgroundColor(Canvas g1) {
+		// 0x80 alpha keeps the scrim translucent in both modes; the RGB
+		// follows the menu background so dark mode flips white→black here
+		// too.
+		bgPaint.setColor(0x80000000 | (Settings.getMenuBgColor() & 0x00FFFFFF));
 		g1.drawRect(0, 0, getGDView().getScaledWidth(), getGDView().getScaledHeight(), bgPaint);
 	}
 
@@ -999,6 +1009,39 @@ public class Menu
 
 	public MenuScreen getCurrentMenu() {
 		return currentMenu;
+	}
+
+	/**
+	 * Walk every initialized menu screen's layout and re-apply text colors
+	 * from current {@link Settings} (i.e. honor a fresh dark-mode toggle).
+	 * Each {@link MenuScreen} caches its own layout in memory, and the
+	 * TextViews inside hold a frozen {@code ColorStateList} from creation
+	 * time — so flipping the toggle in Options has to push new colors
+	 * into screens the user hasn't visited yet (Main, Play, Help, ...),
+	 * not just the currently-mounted one.
+	 *
+	 * <p>Lazy-init screens (manager / level / nameScreen and friends) may
+	 * still be null at the time of the toggle; the null guard skips them
+	 * — they pick up the right colors at construction.
+	 */
+	public void refreshAllScreenColors() {
+		GDActivity gd = getGDActivity();
+		int fg = Settings.getMenuFgColor();
+		MenuScreen[] screens = new MenuScreen[]{
+				mainMenu, playMenu, optionsMenu, aboutScreen, helpMenu,
+				eraseScreen, resetScreen, finishedMenu, ingameScreen,
+				levelSelectorCurrentMenu, trackSelectorCurrentMenu,
+				leagueSelectorCurrentMenu, highScoreMenu,
+				objectiveHelpScreen, keysHelpScreen, unlockingHelpScreen,
+				highscoreHelpScreen, optionsHelpScreen,
+				nameScreen, managerScreen, managerInstalledScreen,
+				managerDownloadScreen, levelScreen,
+		};
+		for (MenuScreen s : screens) {
+			if (s != null && s.getLayout() != null) {
+				gd.repaintMenuTextViews(s.getLayout(), fg);
+			}
+		}
 	}
 
 	/**
@@ -1169,6 +1212,11 @@ public class Menu
 			Settings.setImmersiveModeEnabled(enabled);
 			gd.applyImmersiveMode();
 		}
+		if (item == darkModeOptionItem) {
+			boolean enabled = ((OptionsMenuElement) item).getSelectedOption() == 0;
+			Settings.setDarkModeEnabled(enabled);
+			gd.applyDarkMode();
+		}
 		if (item == controllerAutohideOptionItem) {
 			// Click cycles through the 5 timeout choices (Never/5/10/15/30s).
 			// Same _charvZ()-then-advance pattern as the other multi-state
@@ -1206,9 +1254,16 @@ public class Menu
 			Settings.setPerspectiveEnabled(perspectiveOptionItem.getSelectedOption() == 0);
 			return;
 		}
-		if (item == shadowsOptionItem) {
-			getLevelLoader().setShadowsEnabled(shadowsOptionItem.getSelectedOption() == 0);
-			Settings.setShadowsEnabled(shadowsOptionItem.getSelectedOption() == 0);
+		if (item == shadowModeOptionItem) {
+			// Multi-state cycle (Off / Shadow / 6 neon colors): same
+			// _charvZ()-then-advance pattern as controllerAutohideOptionItem.
+			if (shadowModeOptionItem._charvZ()) {
+				shadowModeOptionItem.setSelectedOption(
+						shadowModeOptionItem.getSelectedOption() + 1);
+			}
+			int mode = shadowModeOptionItem.getSelectedOption();
+			getLevelLoader().setShadowMode(mode);
+			Settings.setShadowMode(mode);
 			return;
 		}
 		if (item == driverSpriteOptionItem) {

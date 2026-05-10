@@ -54,6 +54,7 @@
 	<string name="keypad_landscape_side">Keypad side (landscape)</string>
 	<string name="controller_autohide">Auto-hide keypad after</string>
 	<string name="immersive_mode">Immersive mode</string>
+	<string name="dark_mode">Dark mode</string>
 	<string name="clear_highscore">Clear highscore</string>
 	<string name="full_reset">Full Reset</string>
 	<string name="reset">Reset</string>
@@ -179,6 +180,18 @@
 	<string-array name="on_off">
 		<item>On</item>
 		<item>Off</item>
+	</string-array>
+
+	<!-- Order must match Settings.SHADOW_MODE_* constants. -->
+	<string-array name="shadow_mode_options">
+		<item>Off</item>
+		<item>Shadow</item>
+		<item>Yellow Neon</item>
+		<item>Red Neon</item>
+		<item>Purple Neon</item>
+		<item>Blue Neon</item>
+		<item>Cyan Neon</item>
+		<item>Green Neon</item>
 	</string-array>
 
 	<string-array name="keyset">

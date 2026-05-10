@@ -8,6 +8,7 @@ import org.happysanta.gd.Global;
 import org.happysanta.gd.Menu.Menu;
 import org.happysanta.gd.Menu.MenuScreen;
 import org.happysanta.gd.Menu.SimpleMenuElement;
+import org.happysanta.gd.Settings;
 
 import java.io.IOException;
 import java.util.Timer;
@@ -57,6 +58,22 @@ public class GameView extends View {
 	private Timer timer;
 	private Command menuCommand;
 	private Paint paint = new Paint();
+	// Cached Paint with a colour-matrix filter that inverts RGB channels and
+	// caps the result at 0xAA. Used to tint mostly-black sprite assets (bike
+	// wheels) so they read against the dark-mode sky. Built lazily on first
+	// use; settings flips between this and {@code null} via {@link
+	// #getSpriteTintPaint()}.
+	private Paint darkSpritePaint;
+	// Cached Paint with a multiplicative dim filter (~70%) for sprite bike
+	// parts that already carry their own colors (engine, fender, steering).
+	// Unlike {@link #darkSpritePaint} this preserves hue — it just lowers the
+	// brightness so the parts don't pop too hard against the dark sky.
+	private Paint darkBikePartPaint;
+	// Cached Paint with a full RGB invert (no cap). Used for the splash
+	// logos in dark mode so the original black-on-white art renders as
+	// white-on-black — the muted-gray cap on {@link #darkSpritePaint} left
+	// the logo text too faint to read.
+	private Paint darkSplashInvertPaint;
 	private Object m_ocObject;
 	private byte[][] m_DaaB = {
 			{0, 0},
@@ -235,8 +252,19 @@ public class GameView extends View {
 	}
 
 	public void drawBitmap(Bitmap b, float x, float y, Canvas g) {
-		Paint paint = null;
-		if (!isSDK11OrHigher()) {
+		drawBitmap(b, x, y, g, null);
+	}
+
+	/**
+	 * Draws a sprite with an optional tint Paint. Pass {@code tint == null}
+	 * for normal (untinted) rendering; pass a Paint with a ColorFilter (see
+	 * {@link #getSpriteTintPaint()}) to recolor the sprite — used so the
+	 * mostly-black bike wheels stay legible on the dark-mode sky without
+	 * needing a separate set of bitmap assets.
+	 */
+	public void drawBitmap(Bitmap b, float x, float y, Canvas g, Paint tint) {
+		Paint paint = tint;
+		if (paint == null && !isSDK11OrHigher()) {
 			paint = new Paint();
 			paint.setFlags(Paint.DITHER_FLAG);
 			paint.setFilterBitmap(true);
@@ -245,6 +273,87 @@ public class GameView extends View {
 				new Rect(0, 0, b.getWidth(), b.getHeight()),
 				new RectF(x, y, x + b.getWidthDp(), y + b.getHeightDp()),
 				paint);
+	}
+
+	/**
+	 * Returns a cached Paint that inverts a sprite's RGB channels and caps
+	 * each at 0xAA, or {@code null} when dark mode is off (so callers can
+	 * pass it straight to {@link #drawBitmap(Bitmap, float, float, Canvas,
+	 * Paint)} without branching).
+	 *
+	 * <p>The matrix maps black (0,0,0) → (170,170,170) so dark wheel pixels
+	 * become a muted mid-gray, and white → black so any highlights flip
+	 * symmetrically. Cached because the colour matrix and filter would
+	 * otherwise allocate every frame inside the render loop.
+	 */
+	private Paint getSpriteTintPaint() {
+		if (!Settings.isDarkModeEnabled()) {
+			return null;
+		}
+		if (darkSpritePaint == null) {
+			darkSpritePaint = new Paint();
+			darkSpritePaint.setFilterBitmap(true);
+			ColorMatrix m = new ColorMatrix(new float[]{
+					-0.7f, 0,    0,    0, 170,
+					0,    -0.7f, 0,    0, 170,
+					0,     0,   -0.7f, 0, 170,
+					0,     0,    0,    1,   0,
+			});
+			darkSpritePaint.setColorFilter(new ColorMatrixColorFilter(m));
+		}
+		return darkSpritePaint;
+	}
+
+	/**
+	 * Returns a cached Paint that multiplicatively dims a sprite by ~30% (so
+	 * a bright pixel renders at ~70% of its original brightness), or
+	 * {@code null} when dark mode is off. Hue is preserved — unlike
+	 * {@link #getSpriteTintPaint()} this does not invert.
+	 *
+	 * <p>Use for sprite bike parts (engine, fender, steering) that already
+	 * carry their own colors and just need to be a touch less bright against
+	 * the dark sky. Cached for the same per-frame allocation reason.
+	 */
+	/**
+	 * Returns a cached Paint that fully inverts a sprite's RGB channels
+	 * (slope -1, offset 255), or {@code null} when dark mode is off. Maps
+	 * black → white and white → black with no cap, so the splash-screen
+	 * logos read clearly against the black backdrop.
+	 */
+	private Paint getSplashInvertPaint() {
+		if (!Settings.isDarkModeEnabled()) {
+			return null;
+		}
+		if (darkSplashInvertPaint == null) {
+			darkSplashInvertPaint = new Paint();
+			darkSplashInvertPaint.setFilterBitmap(true);
+			ColorMatrix m = new ColorMatrix(new float[]{
+					-1, 0,  0, 0, 255,
+					 0, -1, 0, 0, 255,
+					 0, 0, -1, 0, 255,
+					 0, 0,  0, 1,   0,
+			});
+			darkSplashInvertPaint.setColorFilter(new ColorMatrixColorFilter(m));
+		}
+		return darkSplashInvertPaint;
+	}
+
+	private Paint getSpriteBikePartPaint() {
+		if (!Settings.isDarkModeEnabled()) {
+			return null;
+		}
+		if (darkBikePartPaint == null) {
+			darkBikePartPaint = new Paint();
+			darkBikePartPaint.setFilterBitmap(true);
+			ColorMatrix m = new ColorMatrix(new float[]{
+					0.7f, 0,    0,    0, 0,
+					0,    0.7f, 0,    0, 0,
+					0,    0,    0.7f, 0, 0,
+					0,    0,    0,    1, 0,
+			});
+			darkBikePartPaint.setColorFilter(new ColorMatrixColorFilter(m));
+		}
+		return darkBikePartPaint;
 	}
 
 	public static void _dovV() {
@@ -524,7 +633,7 @@ public class GameView extends View {
 		float x = offsetX(j - Bitmap.get(Bitmap.STEERING).getWidthDp() / 2);
 		float y = offsetY(k + Bitmap.get(Bitmap.STEERING).getHeightDp() / 2);
 
-		drawBitmap(Bitmap.get(Bitmap.STEERING), x, y);
+		drawBitmap(Bitmap.get(Bitmap.STEERING), x, y, canvas, getSpriteBikePartPaint());
 	}
 
 	public void drawHelmet(float j, float k, int l) {
@@ -549,7 +658,27 @@ public class GameView extends View {
 		// logDebug("Timer: " + l);
 		String txt = String.format("%d:%02d:%02d", l / 6000, (l / 100) % 60, l % 100);
 		// logDebug("drawTimter: long = " + l + ", string = " + txt);
+		// Pick color from Settings each frame so the dark-mode toggle flips
+		// the timer without us having to wire a separate notification.
+		// Paint defaults to BLACK if never set, which used to be fine on
+		// the white sky but vanishes against the dark-mode sky.
+		timerFont.setColor(getOverlayTextColor());
 		canvas.drawText(txt, 18, -infoFont.ascent() + 17, timerFont);
+	}
+
+	/**
+	 * Color for in-game text overlays (timer, info messages like
+	 * "Finished" / "Crashed"). Tracks {@link Settings#getMenuFgColor()},
+	 * but dims to mid-grey while a menu is overlaid so the overlay text
+	 * sinks behind the menu chrome — same intent the original
+	 * {@link #setColor(int, int, int)} brightening had for black-on-white,
+	 * generalised to work for both dark and light themes.
+	 */
+	private int getOverlayTextColor() {
+		if (getGDActivity().isMenuShown()) {
+			return 0xff808080;
+		}
+		return Settings.getMenuFgColor();
 	}
 
 	public synchronized void showInfoMessage(String s, int j) {
@@ -592,7 +721,10 @@ public class GameView extends View {
 		float x = offsetX(j - Bitmap.get(Bitmap.WHEELS, wheel).getWidthDp() / 2);
 		float y = offsetY(k + Bitmap.get(Bitmap.WHEELS, wheel).getHeightDp() / 2);
 
-		drawBitmap(Bitmap.get(Bitmap.WHEELS, wheel), x, y);
+		// Tint when dark mode is on; pass-through (null) otherwise. The tint
+		// paint inverts black sprite pixels to a soft light-gray so the
+		// wheels stay legible on the dark sky.
+		drawBitmap(Bitmap.get(Bitmap.WHEELS, wheel), x, y, canvas, getSpriteTintPaint());
 	}
 
 	int _aIIII(int j, int k, int l, int i1, boolean flag) {
@@ -614,7 +746,7 @@ public class GameView extends View {
 		if (Bitmap.get(Bitmap.ENGINE) != null) {
 			canvas.save();
 			canvas.rotate(fAngleDeg, x + Bitmap.get(Bitmap.ENGINE).getWidthDp() / 2, y + Bitmap.get(Bitmap.ENGINE).getHeightDp() / 2);
-			drawBitmap(Bitmap.get(Bitmap.ENGINE), x, y);
+			drawBitmap(Bitmap.get(Bitmap.ENGINE), x, y, canvas, getSpriteBikePartPaint());
 			canvas.restore();
 		}
 	}
@@ -628,31 +760,93 @@ public class GameView extends View {
 
 			canvas.save();
 			canvas.rotate(fAngleDeg, x + Bitmap.get(Bitmap.FENDER).getWidthDp() / 2, y + Bitmap.get(Bitmap.FENDER).getHeightDp() / 2);
-			drawBitmap(Bitmap.get(Bitmap.FENDER), x, y);
+			drawBitmap(Bitmap.get(Bitmap.FENDER), x, y, canvas, getSpriteBikePartPaint());
 			canvas.restore();
 		}
 	}
 
 	public void _tryvV() {
-		paint.setColor(0xFFFFFFFF);
+		// In-game sky / clear color. Reads from Settings each frame so the
+		// dark-mode toggle takes effect on the next render without needing
+		// to rebuild anything.
+		paint.setColor(Settings.getMenuBgColor());
 		canvas.drawRect(0, 0, m_abI, m_dI, paint);
 	}
 
 	public void setColor(int r, int g, int b) {
 		GDActivity _tmp = activity;
+		boolean dark = Settings.isDarkModeEnabled();
+		// Dark mode: two-branch remap so structural lines stay visible on the
+		// black sky without losing the hue of intentional accent colors.
+		//
+		// (a) Near-black inputs (max channel < 96) — flag poles, line wheels,
+		//     bike frame (50,50,50), driver arms, steering. Complement and
+		//     cap at 0xAA so they read as a muted mid-gray (was 0xCC; user
+		//     asked for the wheels and bike to be a touch darker).
+		// (b) Mid-bright inputs (96 ≤ max < 200) — driver body (0,0,128) and
+		//     helmet line (156,0,0). Brighten each channel additively so the
+		//     hue stays intact (blue body remains blue) but the line becomes
+		//     readable on black; the original light-mode values were tuned
+		//     against a white background and would otherwise sink.
+		// (c) Already-saturated inputs (max ≥ 200) — brake indicators
+		//     (255,0,0) / (100,100,255). Pass through unchanged — they're
+		//     plenty visible on either background and changing the hue would
+		//     muddle the in-game signal.
+		if (dark) {
+			int max = r;
+			if (g > max) max = g;
+			if (b > max) max = b;
+			if (max < 96) {
+				r = 255 - r;
+				g = 255 - g;
+				b = 255 - b;
+				if (r > 0xAA) r = 0xAA;
+				if (g > 0xAA) g = 0xAA;
+				if (b > 0xAA) b = 0xAA;
+			} else if (max < 200) {
+				r += 96;
+				g += 96;
+				b += 96;
+				if (r > 255) r = 255;
+				if (g > 255) g = 255;
+				if (b > 255) b = 255;
+			}
+		}
 		if (getGDActivity().isMenuShown()) {
-			r += 128;
-			g += 128;
-			b += 128;
-			if (r > 240)
-				r = 240;
-			if (g > 240)
-				g = 240;
-			if (b > 240)
-				b = 240;
+			if (dark) {
+				// Mirror the light-mode "lift toward background" dim:
+				// background is black, so push the color *down* by 128
+				// (clamped) so overlay graphics sink behind the menu chrome.
+				r -= 128;
+				g -= 128;
+				b -= 128;
+				if (r < 16) r = 16;
+				if (g < 16) g = 16;
+				if (b < 16) b = 16;
+			} else {
+				r += 128;
+				g += 128;
+				b += 128;
+				if (r > 240)
+					r = 240;
+				if (g > 240)
+					g = 240;
+				if (b > 240)
+					b = 240;
+			}
 		}
 		//m_CGraphics.setColor(j, k, l);
 		paint.setColor(0xFF000000 | (r << 16) | (g << 8) | b);
+	}
+
+	// Set the paint to a raw ARGB color, bypassing setColor's dark-mode
+	// remap and the menu-shown dim. Used by render paths that have already
+	// chosen the exact pixel they want (e.g. neon shadow with alpha fade) —
+	// re-running them through setColor would, for example, send a faded
+	// near-black through the "structural line" invert branch and turn it
+	// bright instead of letting it disappear.
+	public void setRawArgb(int argb) {
+		paint.setColor(argb);
 	}
 
 	// Draw boot logos and something else
@@ -673,23 +867,29 @@ public class GameView extends View {
 		else
 			canvas = g;
 		if (m_oI != 0) {
+			// Splash background tracks the dark-mode toggle so the loading
+			// screens don't flash white before the menu loads. Logos are
+			// drawn with the sprite tint paint when dark mode is on so the
+			// (mostly-black) artwork stays visible against the black bg.
 			if (m_oI == 1) {
 				// Draw codebrew
-				paint.setColor(0xFFFFFFFF);
+				paint.setColor(Settings.getMenuBgColor());
 				canvas.drawRect(0, 0, getScaledWidth(), getScaledHeight(), paint);
 				if (Bitmap.get(Bitmap.CODEBREW_LOGO) != null) {
 					drawBitmap(Bitmap.get(Bitmap.CODEBREW_LOGO),
 							getScaledWidth() / 2 - Bitmap.get(Bitmap.CODEBREW_LOGO).getWidthDp() / 2,
-							(float) (getScaledHeight() / 2 - Bitmap.get(Bitmap.CODEBREW_LOGO).getHeightDp() / 1.6));
+							(float) (getScaledHeight() / 2 - Bitmap.get(Bitmap.CODEBREW_LOGO).getHeightDp() / 1.6),
+							canvas, getSplashInvertPaint());
 				}
 			} else {
 				// Draw gd
-				paint.setColor(0xFFFFFFFF);
+				paint.setColor(Settings.getMenuBgColor());
 				canvas.drawRect(0, 0, getScaledWidth(), getScaledHeight(), paint);
 				if (Bitmap.get(Bitmap.GD_LOGO) != null) {
 					drawBitmap(Bitmap.get(Bitmap.GD_LOGO),
 							getScaledWidth() / 2 - Bitmap.get(Bitmap.GD_LOGO).getWidthDp() / 2,
-							(float) (getScaledHeight() / 2 - Bitmap.get(Bitmap.GD_LOGO).getHeightDp() / 1.6));
+							(float) (getScaledHeight() / 2 - Bitmap.get(Bitmap.GD_LOGO).getHeightDp() / 1.6),
+							canvas, getSplashInvertPaint());
 				}
 			}
 			int j = (int) (((long) (gd.m_longI << 16) << 32) / 0xa0000L >> 16);
@@ -712,8 +912,11 @@ public class GameView extends View {
 				drawTimer(time);
 			}
 			if (infoMessage != null) {
-				setColor(0, 0, 0);
-				infoFont.setColor(paint.getColor());
+				// Was: setColor(0, 0, 0); infoFont.setColor(paint.getColor());
+				// — hardcoded black, brightened to mid-grey when menu shown.
+				// Replaced with getOverlayTextColor() so the message reads
+				// correctly against either light or dark sky.
+				infoFont.setColor(getOverlayTextColor());
 				/*if (m_dI <= 128)
 					canvas.drawText(infoMessage, m_abI / 2 - infoFont.measureText(infoMessage) / 2, 1, infoFont);
 				else*/
@@ -737,10 +940,14 @@ public class GameView extends View {
 	public void drawProgress(int j, boolean flag) {
 		double progr = j / (double) 0xFFFF;
 
-		paint.setColor(0xffc4c4c4);
+		// Dark mode: dark-grey bar over a black sky (the original light-grey
+		// reads as a glaring stripe), with a darker green fill so the
+		// progress indicator doesn't pop too hard either.
+		boolean dark = Settings.isDarkModeEnabled();
+		paint.setColor(dark ? 0xff404040 : 0xffc4c4c4);
 		canvas.drawRect(0, 0, getScaledWidth(), 3, paint);
 
-		paint.setColor(0xff29aa27);
+		paint.setColor(dark ? 0xff185a17 : 0xff29aa27);
 		canvas.drawRect(0, 0, Math.round(getScaledWidth() * Math.min(Math.max(progr, 0), 1)), 3, paint);
 	}
 

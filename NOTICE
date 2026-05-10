@@ -63,6 +63,25 @@ Display
   unaffected) via WindowInsetsControllerCompat with
   BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE so users can swipe to peek the bar
   back. Default off.
+- Added optional "Dark mode" (AMOLED-friendly): flips menu chrome and
+  in-game sky to pitch black with white text, tints system bar icons to
+  stay readable. Single source of truth via Settings.getMenuBgColor /
+  getMenuFgColor / getMenuItemColorStateList; the static
+  R.drawable.menu_item_color selector was replaced with a programmatic
+  ColorStateList that follows the toggle. In-game render path also
+  participates: GameView.setColor() inverts structural near-black inputs
+  (flag poles, line wheels, driver body lines) to a soft light-gray;
+  sprite wheels are tinted via a cached ColorMatrixColorFilter; on-screen
+  keypad row backgrounds and digit text pull from Settings so they flip
+  with the toggle. Default off.
+
+Gameplay visuals
+- Driver-shadow option widened from a boolean (Off/On) to a multi-state
+  setting (Off / Shadow / Yellow / Red / Purple / Blue / Cyan / Green
+  Neon). The neon modes re-use the existing shadow render path but
+  invert the brightness ramp — close to ground glows in the neon base
+  color, fading to a dark gray (#363636) as the bike rises. Default
+  stays "Shadow" so the original behavior is preserved.
 
 Other
 - Cosmetic / clarity comments added at sites where an API change forced a
