@@ -104,16 +104,17 @@ public class Loader {
 	}
 
 	private void readLevels() throws IOException {
-		//try {
+		// Close the stream on every path. readLevels runs on every level
+		// switch (via Loader constructor / setSource), so leaking the FD
+		// here would build up over a session.
 		InputStream in = getLevelsInputStream("levels.mrg");
-		LevelHeader header = Reader.readHeader(in);
-
-		pointers = header.getPointers();
-		names = header.getNames();
-		//} catch (Exception ex) {
-		//	logDebug("Levels.Loader: error while reading mrg file");
-		//	ex.printStackTrace();
-		//}
+		try {
+			LevelHeader header = Reader.readHeader(in);
+			pointers = header.getPointers();
+			names = header.getNames();
+		} finally {
+			try { in.close(); } catch (IOException ignore) { }
+		}
 	}
 
 	public String getLevelName(int j, int k) {
@@ -141,14 +142,14 @@ public class Loader {
 	}
 
 	private void _hIIV(int j, int k) throws InvalidTrackException {
+		InputStream is = null;
 		try {
-			InputStream is = getLevelsInputStream("levels.mrg");
+			is = getLevelsInputStream("levels.mrg");
 			DataInputStream dis = new DataInputStream(is);
 			for (int i1 = pointers[j - 1][k - 1]; i1 > 0; i1 -= dis.skipBytes(i1)) ;
 			if (levels == null)
 				levels = new Level();
 			levels.readTrackData(dis);
-			dis.close();
 			load(levels);
 		} catch (IOException _ex) {
 			// Surface read failures as InvalidTrackException so the menu's
@@ -158,6 +159,13 @@ public class Loader {
 			// document is deleted/revoked mid-session.
 			_ex.printStackTrace();
 			throw new InvalidTrackException(_ex);
+		} finally {
+			// Called on every track switch; close the FD on every path
+			// (including IOExceptions during skipBytes / readTrackData)
+			// so we don't accumulate open streams across a session.
+			if (is != null) {
+				try { is.close(); } catch (IOException ignore) { }
+			}
 		}
 	}
 

@@ -136,8 +136,23 @@ public class DownloadFile {
 
 		@Override
 		protected void onPostExecute(Throwable error) {
-			lock.release();
+			releaseLock();
 			handler.onFinish(error);
+		}
+
+		@Override
+		protected void onCancelled(Throwable error) {
+			// AsyncTask routes cancelled tasks here instead of
+			// onPostExecute, so the wake lock has to be released on
+			// this path too — otherwise hitting back during a download
+			// pins the CPU awake until the process dies.
+			releaseLock();
+		}
+
+		private void releaseLock() {
+			if (lock != null && lock.isHeld()) {
+				lock.release();
+			}
 		}
 
 	}

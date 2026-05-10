@@ -224,8 +224,18 @@ public class LevelStorage {
 		if (tree == null || !tree.exists()) return out;
 		// listFiles() can be expensive on large trees, but for a hand-curated
 		// levels folder this is fine. Filter strictly to .mrg so we don't
-		// pick up README.txt etc.
-		for (DocumentFile child : tree.listFiles()) {
+		// pick up README.txt etc. Some SAF providers (e.g. cloud-backed
+		// ones, or after the user revokes our persisted permission) can
+		// throw or return null here — treat that as "empty folder" rather
+		// than crashing the rescan.
+		DocumentFile[] children;
+		try {
+			children = tree.listFiles();
+		} catch (Exception e) {
+			return out;
+		}
+		if (children == null) return out;
+		for (DocumentFile child : children) {
 			if (child == null || child.isDirectory()) continue;
 			String name = child.getName();
 			if (Filenames.isMrgFilename(name)) {

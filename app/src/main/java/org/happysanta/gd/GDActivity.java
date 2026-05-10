@@ -69,9 +69,15 @@ public class GDActivity extends ComponentActivity implements Runnable {
     private boolean wasStarted = false;
     private boolean wasDestroyed = false;
     private boolean restartingStarted = false;
-    public boolean alive = false;
-    public boolean m_cZ = true;
-    private boolean menuShown = false;
+    // The flags below are written by the UI thread (onPause / destroyApp /
+    // gameToMenu / menuToGame) and read by the game-loop thread and the
+    // GameView render path. `volatile` gives the cross-thread visibility +
+    // atomicity guarantees the JMM otherwise wouldn't grant us; without it
+    // a writer thread's update can stay invisible to readers indefinitely
+    // and (for longs) be torn across two 32-bit halves on 32-bit ARM.
+    public volatile boolean alive = false;
+    public volatile boolean m_cZ = true;
+    private volatile boolean menuShown = false;
     /**
      * Back-press callback registered with {@link androidx.activity.OnBackPressedDispatcher}.
      * We toggle its {@code enabled} flag in {@link #updateBackCallbackEnabled()}:
@@ -92,16 +98,21 @@ public class GDActivity extends ComponentActivity implements Runnable {
     public Loader levelLoader;
     public Physics physEngine;
     public org.happysanta.gd.Menu.Menu menu;
-    public boolean m_caseZ;
+    public volatile boolean m_caseZ;
     public int m_nullI;
-    public long m_forJ;
+    // Timer-related longs are read by the GameView render thread while
+    // being mutated by the game-loop / UI threads (gameToMenu / menuToGame
+    // accumulate pausedTime; goalLoop sets finishedTime). Volatile gives
+    // both visibility and 64-bit-atomic semantics — without it the render
+    // thread can show torn time values on 32-bit ARM.
+    public volatile long m_forJ;
     // public long seconds;
-    public long startedTime = 0;
-    public long finishedTime = 0;
-    public long pausedTime = 0;
-    public long pausedTimeStarted = 0;
+    public volatile long startedTime = 0;
+    public volatile long finishedTime = 0;
+    public volatile long pausedTime = 0;
+    public volatile long pausedTimeStarted = 0;
     public long m_byteJ;
-    public boolean inited = false;
+    public volatile boolean inited = false;
     public boolean m_ifZ;
     private Thread thread;
     private MenuImageView menuBtn;
@@ -1182,6 +1193,12 @@ public class GDActivity extends ComponentActivity implements Runnable {
 
     private void destroyResources() {
         Helpers.logDebug("[GDActivity " + hashCode() + "]  destroyResources()");
+
+        // Drop any pending auto-hide callback. Without this, a runnable
+        // queued seconds before destroy will fire on the dead activity,
+        // briefly pinning a reference to it (~1× the auto-hide timeout)
+        // and trying to manipulate views that are already torn down.
+        cancelPendingKeypadHide();
 
         // if (thread != null) thread.interrupt();
         if (gameView != null) gameView.destroy();
