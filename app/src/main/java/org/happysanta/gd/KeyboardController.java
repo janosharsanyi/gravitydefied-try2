@@ -193,6 +193,19 @@ public class KeyboardController {
 						}
 						break;
 				}
+			} else if (action == MotionEvent.ACTION_CANCEL) {
+				// Gesture canceled by the system (parent intercept, window
+				// loss, etc.). UP events won't follow, so release every
+				// pointer that's holding a button — otherwise the key stays
+				// stuck "pressed" and the bike keeps throttling/leaning.
+				for (int i = 0; i < MAX_POINTERS; i++) {
+					PointerInfo pointer = pointers[i];
+					if (pointer.btnIndex < 0) continue;
+					LinearLayout btn = pointer.getButton();
+					if (btn != null) btn.setPressed(false);
+					gameView.keyReleased(gameKeyCode(pointer.btnIndex));
+					pointer.finish();
+				}
 			} else if (action == MotionEvent.ACTION_MOVE && !gd.isMenuShown() && !DISABLE_MOVE) {
 				int pointerCount = event.getPointerCount();
 				LinearLayout btn, oldBtn;

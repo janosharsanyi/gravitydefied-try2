@@ -726,7 +726,11 @@ public class GDActivity extends ComponentActivity implements Runnable {
 					seconds -= 10L; */
                     goalLoop();
                     // menu.setLastTrackTime(seconds / 10L);
-                    menu.setLastTrackTime((finishedTime - startedTime) / 10);
+                    // Subtract pausedTime to match the displayed timer
+                    // (GameView shows finished - startedTime - pausedTime).
+                    // Without this, time spent in the pause menu is saved as
+                    // part of the run, inflating saved best times.
+                    menu.setLastTrackTime((finishedTime - startedTime - pausedTime) / 10);
                     menu.showMenu(2);
 
                     if (menu.canStartTrack())

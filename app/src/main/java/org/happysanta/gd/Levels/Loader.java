@@ -151,7 +151,13 @@ public class Loader {
 			dis.close();
 			load(levels);
 		} catch (IOException _ex) {
+			// Surface read failures as InvalidTrackException so the menu's
+			// "level damaged" prompt fires. Swallowing IOException here
+			// would leave `levels` pointing at the previous track's data
+			// and silently start the wrong track — happens when a SAF
+			// document is deleted/revoked mid-session.
 			_ex.printStackTrace();
+			throw new InvalidTrackException(_ex);
 		}
 	}
 

@@ -239,6 +239,7 @@ public class LevelsManager {
 		new Thread(new Runnable() {
 			@Override
 			public void run() {
+				boolean handedOffToUi = false;
 				try {
 					final Fingerprint fp;
 					try {
@@ -248,6 +249,7 @@ public class LevelsManager {
 						return;
 					}
 					if (active.getHash().equals(fp.hash)) return;
+					handedOffToUi = true;
 					getGDActivity().runOnUiThread(new Runnable() {
 						@Override
 						public void run() {
@@ -263,11 +265,13 @@ public class LevelsManager {
 						}
 					});
 				} catch (Throwable outer) {
-					// Belt-and-suspenders: never leave the in-flight flag
-					// stuck on if something unexpected blows up before we
-					// get to the UI-thread post.
-					resumeCheckInFlight = false;
 					logDebug("LevelsManager.checkActiveLevelOnResume: " + outer);
+				} finally {
+					// Worker exited without scheduling the UI prompt
+					// (read failed, hash matched, or unexpected throw).
+					// Reset the flag here so a subsequent resume can retry.
+					// When we DID hand off, the UI runnable owns the reset.
+					if (!handedOffToUi) resumeCheckInFlight = false;
 				}
 			}
 		}, "GD-resume-hashcheck").start();
