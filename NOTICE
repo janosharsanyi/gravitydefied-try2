@@ -1,0 +1,64 @@
+Gravity Defied — Android (modernized)
+======================================
+
+This work is a modified version of the upstream Android port at
+https://github.com/evgenyzinoviev/gravitydefied
+baseline commit ee26c95fddff87826cfba7bfcdda6bac156c8741 ("Add GPLv2 license",
+2015-08-14), imported on 2026-05-09.
+
+Upstream is licensed under GPL v2; this work continues under GPL v2 — see
+LICENSE.txt.
+
+This NOTICE is the GPLv2 §2(a) "modification notice" for the work as a whole.
+Per-commit detail lives in this repository's git history; this file lists the
+categories of change made relative to upstream.
+
+
+Modifications relative to upstream
+----------------------------------
+
+Build system
+- Migrated from Eclipse / Ant to Android Studio + Gradle.
+- Build scripts converted to Kotlin DSL (build.gradle.kts,
+  settings.gradle.kts).
+- compileSdk / targetSdk raised to current stable; minSdk raised from 8 to 23.
+
+Dependencies
+- Migrated to AndroidX; legacy android.support.* removed.
+- ACRA crash reporter (acra-4.5.0.jar) removed; no replacement.
+- All bare jars in libs/ removed in favour of Gradle-managed dependencies.
+
+Manifest / permissions
+- WRITE_EXTERNAL_STORAGE removed (no longer needed under scoped storage).
+- android.hardware.gamepad declared as optional feature.
+- Runtime permission flow added where required by API 23+.
+
+Storage
+- Replaced direct java.io.File access to external storage with the Storage
+  Access Framework (ACTION_OPEN_DOCUMENT_TREE, persistable URI permissions,
+  DocumentFile / ContentResolver). User picks the levels folder on first run;
+  the folder survives uninstall and is visible in any file manager.
+- Levels loader and download/install paths refactored against a small
+  storage abstraction.
+
+Platform API replacements
+- Replaced deprecated Activity.onBackPressed override with
+  OnBackPressedDispatcher / OnBackPressedCallback.
+- Replaced deprecated startActivityForResult / onActivityResult call sites
+  where appropriate.
+- Replaced removed org.apache.http.* networking calls with HttpURLConnection.
+
+Input
+- Added physical gamepad / controller support
+  (org.happysanta.gd.ControllerInputHandler): d-pad, left stick, A/B,
+  Start, with semantic mapping that follows the active keyset in-game and
+  the canonical menu-nav keys in menu.
+- On-screen keypad reworked: bottom-anchored in both orientations
+  (single strip in portrait, two corner clusters in landscape), with new
+  user setting "Auto-hide keypad after" (Always / Immediately / 5/10/15/30s)
+  driven by a touch-idle timer.
+
+Other
+- Cosmetic / clarity comments added at sites where an API change forced a
+  code change, noting the old call and why it changed (helps cross-checking
+  against upstream).
