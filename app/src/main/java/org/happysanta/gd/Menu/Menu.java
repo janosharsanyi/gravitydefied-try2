@@ -92,6 +92,7 @@ public class Menu
 	private OptionsMenuElement immersiveModeOptionItem;
 	private OptionsMenuElement immersiveNavOptionItem;
 	private OptionsMenuElement darkModeOptionItem;
+	private OptionsMenuElement fpsOverlayOptionItem;
 	private OptionsMenuElement vibrateOnTouchOptionItem;
 	private SimpleMenuElementNew clearHighscoreOptionItem;
 	private SimpleMenuElementNew fullResetItem;
@@ -428,6 +429,7 @@ public class Menu
 				immersiveModeOptionItem = new OptionsMenuElement(getString(R.string.immersive_mode), Settings.isImmersiveModeEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				immersiveNavOptionItem = new OptionsMenuElement(getString(R.string.immersive_nav), Settings.isImmersiveNavEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				darkModeOptionItem = new OptionsMenuElement(getString(R.string.dark_mode), Settings.isDarkModeEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
+				fpsOverlayOptionItem = new OptionsMenuElement(getString(R.string.fps_overlay), Settings.isFpsOverlayEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				clearHighscoreOptionItem = new SimpleMenuElementNew(getString(R.string.clear_highscore), eraseScreen, this);
 
 				// if (hasPointer)
@@ -452,6 +454,7 @@ public class Menu
 				optionsMenu.addItem(immersiveModeOptionItem);
 				optionsMenu.addItem(immersiveNavOptionItem);
 				optionsMenu.addItem(darkModeOptionItem);
+				optionsMenu.addItem(fpsOverlayOptionItem);
 				optionsMenu.addItem(clearHighscoreOptionItem);
 				optionsMenu.addItem(createAction(ActionMenuElement.BACK));
 
@@ -1265,6 +1268,11 @@ public class Menu
 			boolean enabled = ((OptionsMenuElement) item).getSelectedOption() == 0;
 			Settings.setDarkModeEnabled(enabled);
 			gd.applyDarkMode();
+		}
+		if (item == fpsOverlayOptionItem) {
+			// GameView.onDraw / drawGame read the flag every frame, so the
+			// overlay appears/disappears on the next vsync without notify.
+			Settings.setFpsOverlayEnabled(((OptionsMenuElement) item).getSelectedOption() == 0);
 		}
 		if (item == controllerAutohideOptionItem) {
 			// Click cycles through the 5 timeout choices (Never/5/10/15/30s).

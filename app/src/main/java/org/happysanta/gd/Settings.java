@@ -227,6 +227,13 @@ public class Settings {
 	// getMenuItemColorStateList. Default off — keep the original light look.
 	private static final String DARK_MODE_ENABLED = "dark_mode_enabled";
 	private static final boolean DARK_MODE_ENABLED_DEFAULT = false;
+
+	// Diagnostic overlay: top-right corner, in the same font/color as the
+	// in-game timer. Format "X.Xms / Yfps" computed from a 30-frame ring
+	// buffer of onDraw inter-arrival times. Default off — the original
+	// game has no such overlay; users opt in.
+	private static final String FPS_OVERLAY_ENABLED = "fps_overlay_enabled";
+	private static final boolean FPS_OVERLAY_ENABLED_DEFAULT = false;
 	private static final int MENU_COLOR_LIGHT_BG = 0xffffffff;
 	private static final int MENU_COLOR_LIGHT_FG = 0xff000000;
 	private static final int MENU_COLOR_DARK_BG = 0xff000000;
@@ -272,6 +279,7 @@ public class Settings {
 		setImmersiveModeEnabled(IMMERSIVE_MODE_ENABLED_DEFAULT);
 		setImmersiveNavEnabled(IMMERSIVE_NAV_ENABLED_DEFAULT);
 		setDarkModeEnabled(DARK_MODE_ENABLED_DEFAULT);
+		setFpsOverlayEnabled(FPS_OVERLAY_ENABLED_DEFAULT);
 		setInputOption(INPUT_OPTION_DEFAULT);
 		setLevelsSort(LEVELS_SORT_DEFAULT);
 		setName(NAME_CHARS_DEFALUT);
@@ -489,6 +497,14 @@ public class Settings {
 
 	public static void setDarkModeEnabled(boolean enabled) {
 		setBoolean(DARK_MODE_ENABLED, enabled);
+	}
+
+	public static boolean isFpsOverlayEnabled() {
+		return preferences.getBoolean(FPS_OVERLAY_ENABLED, FPS_OVERLAY_ENABLED_DEFAULT);
+	}
+
+	public static void setFpsOverlayEnabled(boolean enabled) {
+		setBoolean(FPS_OVERLAY_ENABLED, enabled);
 	}
 
 	// Single source of truth for the menu/in-game background color. Returns

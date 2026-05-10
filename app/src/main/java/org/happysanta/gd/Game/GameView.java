@@ -46,6 +46,19 @@ public class GameView extends View {
 	private GDActivity activity;
 	private Paint infoFont;
 	private Paint timerFont;
+
+	// FPS / frame-time overlay (Settings.isFpsOverlayEnabled()). Sampled
+	// at the top of onDraw — onDraw cadence ≈ vsync because we
+	// invalidate() at the bottom of each pass, so these intervals
+	// reflect actual on-screen frame times. 30-frame ring buffer
+	// smooths single-frame jitter while still reacting in ~half a
+	// second on a 60Hz panel; anything bigger feels laggy when you're
+	// watching the number.
+	private static final int FPS_SAMPLE_FRAMES = 30;
+	private final long[] fpsSamplesNs = new long[FPS_SAMPLE_FRAMES];
+	private int fpsSampleIdx = 0;
+	private int fpsSampleCount = 0;
+	private long fpsLastFrameNs = 0;
 	private boolean m_ahZ;
 	private int m_oI;
 	private boolean m_AZ;
@@ -674,6 +687,30 @@ public class GameView extends View {
 	}
 
 	/**
+	 * Top-center diagnostic overlay: average frame interval (ms) and the
+	 * derived frame rate (fps) over the last {@link #FPS_SAMPLE_FRAMES}
+	 * frames. Mirrors {@link #drawTimer}'s font, color, and Y baseline so
+	 * the timer and FPS read line up visually. Centered (rather than
+	 * top-right) to clear the in-game 3-dot overflow menu in the top-right
+	 * corner. Caller is expected to gate this on
+	 * {@link Settings#isFpsOverlayEnabled()}.
+	 */
+	public void drawFps() {
+		if (fpsSampleCount == 0) return;
+		long sum = 0;
+		for (int i = 0; i < fpsSampleCount; i++) sum += fpsSamplesNs[i];
+		double avgNs = (double) sum / fpsSampleCount;
+		double ms = avgNs / 1_000_000.0;
+		double fps = avgNs > 0 ? 1_000_000_000.0 / avgNs : 0;
+		// Cap displayed fps at 999 to keep the string width bounded; on a
+		// 120Hz panel real numbers stay around 60-120 anyway.
+		String txt = String.format("%.1fms / %.0ffps", ms, Math.min(fps, 999));
+		timerFont.setColor(getOverlayTextColor());
+		float x = (getScaledWidth() - timerFont.measureText(txt)) / 2f;
+		canvas.drawText(txt, x, -infoFont.ascent() + 17, timerFont);
+	}
+
+	/**
 	 * Color for in-game text overlays (timer, info messages like
 	 * "Finished" / "Crashed"). Tracks {@link Settings#getMenuFgColor()},
 	 * but dims to mid-grey while a menu is overlaid so the overlay text
@@ -917,6 +954,12 @@ public class GameView extends View {
 					time = (finished - gd.startedTime - gd.pausedTime) / 10;
 				}
 				drawTimer(time);
+			}
+			// FPS / frame-time overlay opposite-corner from the timer. Drawn
+			// regardless of whether drawTimer is on — useful for benchmarking
+			// menu→track transitions, splash skip, etc.
+			if (Settings.isFpsOverlayEnabled()) {
+				drawFps();
 			}
 			if (infoMessage != null) {
 				// Was: setColor(0, 0, 0); infoFont.setColor(paint.getColor());
@@ -1183,6 +1226,23 @@ public class GameView extends View {
 
 	@Override
 	public void onDraw(Canvas g) {
+		// Sample frame interval before any drawing work so the measured
+		// time spans the full draw — ring buffer guarded by the toggle so
+		// the no-overlay path stays one volatile-bool read per frame.
+		if (Settings.isFpsOverlayEnabled()) {
+			long now = System.nanoTime();
+			if (fpsLastFrameNs != 0) {
+				fpsSamplesNs[fpsSampleIdx] = now - fpsLastFrameNs;
+				fpsSampleIdx = (fpsSampleIdx + 1) % FPS_SAMPLE_FRAMES;
+				if (fpsSampleCount < FPS_SAMPLE_FRAMES) fpsSampleCount++;
+			}
+			fpsLastFrameNs = now;
+		} else {
+			// Reset so a re-enable doesn't blend a stale "frame" that spans
+			// the disabled period (would read as 0.0fps for ~30 frames).
+			fpsLastFrameNs = 0;
+			fpsSampleCount = 0;
+		}
 		g.save();
 		if (!Global.DISABLE_SCALING)
 			g.scale(Global.density, Global.density);

@@ -127,6 +127,11 @@ Display
   app's Dark mode is on, so system dialogs (load-confirm, score-reset,
   download prompts, sort picker, etc.) follow the app theme instead of
   inheriting the activity's legacy light NoTitleBar theme.
+- Added optional "Show FPS" diagnostic overlay: top-right corner of the
+  in-game view, mirroring the existing timer's font and color, displaying
+  the average per-frame interval in milliseconds and the derived frame
+  rate ("X.Xms / Yfps") sampled over the last 30 onDraw calls. Default
+  off.
 
 Gameplay visuals
 - Driver-shadow option widened from a boolean (Off/On) to a multi-state

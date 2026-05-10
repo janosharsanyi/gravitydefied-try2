@@ -63,6 +63,7 @@
 	<string name="immersive_mode">Immersive mode</string>
 	<string name="immersive_nav">Hide nav bar</string>
 	<string name="dark_mode">Dark mode</string>
+	<string name="fps_overlay">Show FPS</string>
 	<string name="clear_highscore">Clear highscore</string>
 	<string name="full_reset">Full Reset</string>
 	<string name="reset">Reset</string>
