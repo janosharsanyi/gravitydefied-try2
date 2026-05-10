@@ -243,7 +243,7 @@ public class GDActivity extends ComponentActivity implements Runnable {
                         };
 
                         if (response.hasTwoButtons()) {
-                            AlertDialog.Builder alert = new AlertDialog.Builder(self)
+                            AlertDialog.Builder alert = Helpers.makeAlertBuilder(self)
                                     .setTitle(response.getTitle())
                                     .setMessage(response.getMessage())
                                     .setPositiveButton(response.getOKButton(), new DialogInterface.OnClickListener() {
@@ -265,7 +265,7 @@ public class GDActivity extends ComponentActivity implements Runnable {
                                     });
                             alert.show();
                         } else {
-                            AlertDialog alertDialog = new AlertDialog.Builder(self)
+                            AlertDialog alertDialog = Helpers.makeAlertBuilder(self)
                                     .setTitle(response.getTitle())
                                     .setMessage(response.getMessage())
                                     .setPositiveButton(response.getOKButton(), new DialogInterface.OnClickListener() {
@@ -909,7 +909,7 @@ public class GDActivity extends ComponentActivity implements Runnable {
         LevelStorage storage = levelsManager.getStorage();
         Intent viewIntent = storage.createViewFolderIntent();
         if (viewIntent == null) {
-            new AlertDialog.Builder(this)
+            Helpers.makeAlertBuilder(this)
                     .setMessage(getString(R.string.no_levels_folder))
                     .setPositiveButton(android.R.string.ok, null)
                     .show();
@@ -933,7 +933,7 @@ public class GDActivity extends ComponentActivity implements Runnable {
         } catch (android.content.ActivityNotFoundException e) {
             // Genuinely impossible on a real Android device (the SAF picker
             // is part of system DocumentsUI), but be defensive.
-            new AlertDialog.Builder(this)
+            Helpers.makeAlertBuilder(this)
                     .setMessage(getString(R.string.no_file_manager))
                     .setPositiveButton(android.R.string.ok, null)
                     .show();
@@ -997,7 +997,7 @@ public class GDActivity extends ComponentActivity implements Runnable {
                 callback.onPicked(tempFile, displayName);
             } catch (IOException e) {
                 e.printStackTrace();
-                new AlertDialog.Builder(this)
+                Helpers.makeAlertBuilder(this)
                         .setTitle(getString(R.string.error))
                         .setMessage("Could not read picked file: " + e.getMessage())
                         .setPositiveButton(android.R.string.ok, null)

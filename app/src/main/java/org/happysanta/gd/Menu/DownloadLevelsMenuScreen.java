@@ -123,7 +123,7 @@ public class DownloadLevelsMenuScreen extends LevelsMenuScreen {
 	protected void showSortDialog() {
 		final CharSequence[] items = getStringArray(R.array.sort_variants);
 
-		AlertDialog dialog = new AlertDialog.Builder(getGDActivity())
+		AlertDialog dialog = makeAlertBuilder(getGDActivity())
 				.setTitle(getString(R.string.sort_by))
 				.setSingleChoiceItems(items, API.getIdBySortType(sort), new DialogInterface.OnClickListener() {
 					public void onClick(DialogInterface dialog, int item) {

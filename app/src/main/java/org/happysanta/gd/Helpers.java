@@ -207,9 +207,27 @@ public class Helpers {
 		return System.currentTimeMillis() / 1000L;
 	}
 
+	/**
+	 * Returns an {@link AlertDialog.Builder} themed to follow the app's
+	 * Dark mode setting. The activity itself uses a legacy
+	 * {@code Theme.NoTitleBar} which is light, so a default
+	 * {@code new AlertDialog.Builder(context)} renders as a light dialog
+	 * even when the user has Dark mode on — readable, but jarring against
+	 * the otherwise-black UI. In dark mode we wrap the context with
+	 * {@code Theme.Material.Dialog.Alert} so the dialog chrome flips to
+	 * dark too. Light mode keeps the unwrapped builder so the existing
+	 * look is preserved bit-for-bit.
+	 */
+	public static AlertDialog.Builder makeAlertBuilder(Context context) {
+		if (Settings.isDarkModeEnabled()) {
+			return new AlertDialog.Builder(context, android.R.style.Theme_Material_Dialog_Alert);
+		}
+		return new AlertDialog.Builder(context);
+	}
+
 	public static void showAlert(String title, String message, final Runnable listener) {
 		Context context = getGDActivity();
-		AlertDialog alertDialog = new AlertDialog.Builder(context)
+		AlertDialog alertDialog = makeAlertBuilder(context)
 				.setTitle(title)
 				.setMessage(message)
 				.setPositiveButton(getString(R.string.ok), new DialogInterface.OnClickListener() {
@@ -230,7 +248,7 @@ public class Helpers {
 
 	public static void showConfirm(String title, String message, final Runnable onOk, final Runnable onCancel) {
 		Context context = getGDActivity();
-		AlertDialog.Builder alert = new AlertDialog.Builder(context)
+		AlertDialog.Builder alert = makeAlertBuilder(context)
 				.setTitle(title)
 				.setMessage(message)
 				.setPositiveButton(getString(R.string.ok), new DialogInterface.OnClickListener() {

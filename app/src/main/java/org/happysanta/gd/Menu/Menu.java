@@ -1750,7 +1750,7 @@ public class Menu
 				input.setInputType(InputType.TYPE_CLASS_TEXT);
 				input.setText(defaultName);
 
-				new AlertDialog.Builder(gd)
+				makeAlertBuilder(gd)
 						.setTitle(getString(R.string.enter_levels_name_title))
 						.setMessage(getString(R.string.enter_levels_name))
 						.setView(input)
@@ -1864,7 +1864,7 @@ public class Menu
 		// Both options bump the stored hash so we don't re-flag the same
 		// files on the next rescan / launch — the difference is whether
 		// scores and unlocks survive.
-		new android.app.AlertDialog.Builder(gd)
+		makeAlertBuilder(gd)
 				.setTitle(getString(R.string.changed_files_title))
 				.setMessage(msg)
 				.setPositiveButton(getString(R.string.keep_progress),

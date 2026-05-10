@@ -71,7 +71,10 @@ Input
 - On-screen keypad reworked: bottom-anchored in both orientations
   (single strip in portrait, two corner clusters in landscape), with new
   user setting "Auto-hide keypad after" (Show / Hide / 5/10/15/30s)
-  driven by a touch-idle timer.
+  driven by a touch-idle timer. "Hide" is a hard off-switch — keypad
+  never shows (in menu or in-game) and touch does not wake it, so
+  controller-only players don't have the keypad obscure menu items
+  or steal scroll gestures.
 
 Display
 - Added optional "Immersive mode" setting that hides the status bar (nav bar
@@ -89,6 +92,11 @@ Display
   sprite wheels are tinted via a cached ColorMatrixColorFilter; on-screen
   keypad row backgrounds and digit text pull from Settings so they flip
   with the toggle. Default off.
+- AlertDialog construction routed through a single Helpers.makeAlertBuilder
+  helper that wraps the context with Theme.Material.Dialog.Alert when the
+  app's Dark mode is on, so system dialogs (load-confirm, score-reset,
+  download prompts, sort picker, etc.) follow the app theme instead of
+  inheriting the activity's legacy light NoTitleBar theme.
 
 Gameplay visuals
 - Driver-shadow option widened from a boolean (Off/On) to a multi-state
@@ -99,13 +107,15 @@ Gameplay visuals
   stays "Shadow" so the original behavior is preserved.
 - Track-color preset added (Original / Green / Cyan / Red / Yellow /
   Lime / Blue / Gray / Black/White). Original keeps the legacy
-  single-color render. Every other preset opts in to a 3-color render:
-  a new background contour line is drawn between the actual ground
-  points, the across tick is rendered as a gradient from background
-  color (ground end) to foreground color (raised end), and the
-  foreground raised line uses the preset's foreground color. Black/White
-  is theme-aware (white in dark mode, black in light mode). Default
-  stays "Original" so the original behavior is preserved bit-for-bit.
+  single-color render. Every other preset opts in to a 3-line render
+  using two preset colors named by visual depth: a foreground
+  (lower / brighter) line on the actual ground points, a background
+  (upper / darker) line on the raised perspective projection, and an
+  across tick rendered as a gradient from foreground at the ground
+  end up to background at the raised end. Black/White is theme-aware
+  (foreground white in dark mode, black in light mode; background
+  always darker than foreground). Default stays "Original" so the
+  original behavior is preserved bit-for-bit.
 
 Other
 - Cosmetic / clarity comments added at sites where an API change forced a

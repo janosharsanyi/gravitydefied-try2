@@ -36,6 +36,7 @@ import static org.happysanta.gd.Helpers.getString;
 import static org.happysanta.gd.Helpers.getTimestamp;
 import static org.happysanta.gd.Helpers.isOnline;
 import static org.happysanta.gd.Helpers.logDebug;
+import static org.happysanta.gd.Helpers.makeAlertBuilder;
 import static org.happysanta.gd.Helpers.showAlert;
 
 public class LevelsManager {
@@ -162,7 +163,7 @@ public class LevelsManager {
 			public void run() {
 				String msg = String.format(getString(R.string.changed_file_load_message),
 						change.level.getName());
-				new AlertDialog.Builder(getGDActivity())
+				makeAlertBuilder(getGDActivity())
 						.setTitle(getString(R.string.changed_files_title))
 						.setMessage(msg)
 						.setPositiveButton(getString(R.string.keep_progress),
@@ -277,7 +278,7 @@ public class LevelsManager {
 				fp.header.getCount(0), fp.header.getCount(1), fp.header.getCount(2));
 		String msg = String.format(getString(R.string.changed_file_load_message),
 				active.getName());
-		new AlertDialog.Builder(getGDActivity())
+		makeAlertBuilder(getGDActivity())
 				.setTitle(getString(R.string.changed_files_title))
 				.setMessage(msg)
 				.setPositiveButton(getString(R.string.keep_progress),
@@ -491,7 +492,7 @@ public class LevelsManager {
 		final ChangedLevel change = new ChangedLevel(level, fp.hash,
 				fp.header.getCount(0), fp.header.getCount(1), fp.header.getCount(2));
 		String msg = String.format(getString(R.string.changed_file_load_message), level.getName());
-		new AlertDialog.Builder(getGDActivity())
+		makeAlertBuilder(getGDActivity())
 				.setTitle(getString(R.string.changed_files_title))
 				.setMessage(msg)
 				.setPositiveButton(getString(R.string.keep_progress),
@@ -701,7 +702,7 @@ public class LevelsManager {
 
 	public void showSuccessfullyInstalledDialog() {
 		GDActivity gd = getGDActivity();
-		AlertDialog success = new AlertDialog.Builder(gd)
+		AlertDialog success = makeAlertBuilder(gd)
 				.setTitle(getString(R.string.installed))
 				.setMessage(getString(R.string.successfully_installed))
 				.setPositiveButton(getString(R.string.ok), null)
