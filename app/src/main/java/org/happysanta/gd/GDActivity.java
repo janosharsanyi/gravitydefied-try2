@@ -339,6 +339,16 @@ public class GDActivity extends ComponentActivity implements Runnable {
             // toggle via applyDarkMode().
             frame.setBackgroundColor(Settings.getMenuBgColor());
 
+            // Suppress the default D-pad/joystick focus highlight rectangle
+            // that Android draws around the first focusable descendant when
+            // a gamepad is connected (visible as a border around GameView /
+            // the menu root). Gamepad input is intercepted at the activity
+            // level via dispatchKeyEvent / dispatchGenericMotionEvent
+            // regardless of which view holds focus, so blocking focus
+            // traversal entirely costs us nothing and removes the visual.
+            frame.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+            frame.setFocusable(false);
+
             // Inset the root frame by the system bars so neither game nor
             // menus draw under the status bar (top) or nav bar (bottom).
             // Required since edge-to-edge is enforced for targetSdk >= 35.
