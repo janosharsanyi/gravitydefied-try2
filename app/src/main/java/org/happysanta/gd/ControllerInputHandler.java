@@ -5,6 +5,8 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 
 /**
  * Translates physical gamepad input into the J2ME-style numpad keypresses
@@ -468,6 +470,14 @@ public class ControllerInputHandler {
         int[] cached = rightStickAxesByDevice.get(key);
         if (cached != null) return cached;
 
+        // Lookup-time pruning: a new device showed up, so opportunistically
+        // drop entries for IDs that are no longer present. Android can
+        // reissue device IDs on disconnect/reconnect, so without this the
+        // map would grow unbounded over a long session. Cheap — happens
+        // only on cache miss (which itself is rare; once per pad per run).
+        // No InputManager listener required.
+        pruneStaleDeviceIds();
+
         int[] result;
         boolean zPair = isBipolarStickAxis(device, MotionEvent.AXIS_Z)
                 && isBipolarStickAxis(device, MotionEvent.AXIS_RZ);
@@ -487,6 +497,21 @@ public class ControllerInputHandler {
         }
         rightStickAxesByDevice.put(key, result);
         return result;
+    }
+
+    /** Drop entries from {@link #rightStickAxesByDevice} whose device ID
+     *  is no longer present according to {@link InputDevice#getDeviceIds()}.
+     *  Called from {@link #resolveRightStickAxes} on cache miss so the map
+     *  can't grow unbounded if Android reissues IDs across reconnects. */
+    private void pruneStaleDeviceIds() {
+        if (rightStickAxesByDevice.isEmpty()) return;
+        int[] live = InputDevice.getDeviceIds();
+        HashSet<Integer> liveSet = new HashSet<>(live.length);
+        for (int id : live) liveSet.add(id);
+        Iterator<Integer> it = rightStickAxesByDevice.keySet().iterator();
+        while (it.hasNext()) {
+            if (!liveSet.contains(it.next())) it.remove();
+        }
     }
 
     /** True if {@code device} declares {@code axis} as a bipolar stick axis
