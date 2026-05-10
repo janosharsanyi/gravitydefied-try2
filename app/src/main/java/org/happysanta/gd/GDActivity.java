@@ -576,6 +576,32 @@ public class GDActivity extends ComponentActivity implements Runnable {
                 MenuHelmetView.clearStaticFields();
 
                 levelsManager = new LevelsManager();
+                // If the DB couldn't be opened the manager is half-built —
+                // currentLevel is null and every levels-aware code path
+                // downstream would NPE. Surface a fatal-error dialog to the
+                // user and finish() the activity rather than booting into a
+                // visibly broken menu. Posting via runOnUiThread because
+                // we're on the bg init thread; bail out of run() immediately
+                // so we don't keep building Loader/Physics/Menu on the
+                // half-built manager.
+                if (!levelsManager.isDbOK()) {
+                    Helpers.logDebug("GDActivity.run: LevelsManager DB open failed — aborting init");
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            Helpers.showAlert(
+                                    Helpers.getString(R.string.error),
+                                    Helpers.getString(R.string.e_database_open_failed),
+                                    new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            finish();
+                                        }
+                                    });
+                        }
+                    });
+                    return;
+                }
                 // If the active level's file was swapped while the app was
                 // off, ask the user (Keep/Reset) BEFORE we build the loader
                 // and menu — both consume currentLevel's counts/unlocks, and

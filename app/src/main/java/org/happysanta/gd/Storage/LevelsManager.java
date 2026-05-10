@@ -44,7 +44,16 @@ public class LevelsManager {
 	private LevelsDataSource dataSource;
 	private LevelStorage storage;
 	private boolean dbOK = false;
-	private Level currentLevel;
+	/**
+	 * Volatile because we read this from the UI thread (menus, scoring) but
+	 * write it from whichever thread last called {@link #reload()} —
+	 * including bg-init, AsyncTask completion paths
+	 * ({@link #applyChanged}, {@link #acknowledgeChanged}, {@link #delete}),
+	 * and the load() prompt callbacks. Volatile gives the cross-thread
+	 * happens-before edge we need; the field only ever holds a fully-
+	 * constructed Level reference, so no torn-read concerns.
+	 */
+	private volatile Level currentLevel;
 	/**
 	 * Captured during {@link #LevelsManager() construction} when the
 	 * active level's on-disk file no longer matches its stored hash —
@@ -86,7 +95,14 @@ public class LevelsManager {
 		} catch (SQLException e) {
 			e.printStackTrace();
 			logDebug("LevelsManager: db feels bad :(");
-			// return;
+			// Bail out of the rest of init: every step below
+			// (mrgIsAvailable, reload, the launch-time hash check) calls
+			// dataSource.getLevel(...), which would NPE on the unopened
+			// db handle. Leaving dbOK=false signals the caller — see
+			// GDActivity's bg-init thread — to surface a fatal-error
+			// dialog and finish() rather than booting into a half-broken
+			// menu.
+			return;
 		}
 
 		logDebug("LevelsManager: db feels OK :)");
@@ -317,12 +333,27 @@ public class LevelsManager {
 		long id = Settings.getLevelId();
 		currentLevel = dataSource.getLevel(id);
 
+		// Belt-and-braces fallback: the constructor's validation chain
+		// (mrgIsAvailable + resetId) already guarantees a valid id before the
+		// initial reload(), but reload() also runs from applyChanged /
+		// acknowledgeChanged / delete paths where the prefs id could in
+		// principle have drifted. Falling back to the bundled level keeps
+		// {@code currentLevel != null} as an invariant whenever dbOK == true,
+		// so getCurrentId() / getCurrentLevel() callers don't need null guards.
+		if (currentLevel == null && id != 1) {
+			logDebug("LevelsManager.reload: id=" + id + " missing, falling back to default");
+			Settings.setLevelId(1);
+			currentLevel = dataSource.getLevel(1);
+		}
+
 		if (currentLevel == null) {
-			logDebug("LevelsManager: failed to load currentLevel; currentId = " + id);
+			// Default row (id=1) is recreated at the top of every constructor
+			// run, so reaching here means the DB itself is in an
+			// unrecoverable state. Caller path checks dbOK to surface this.
+			logDebug("LevelsManager.reload: default row missing — DB state is broken");
 		} else {
 			logDebug("LevelsManager: level = " + currentLevel);
 		}
-
 	}
 
 	public void closeDataSource() {

@@ -335,5 +335,6 @@
 	<string name="e_cannot_save_level">Cannot save level into database</string>
 	<string name="e_no_network_connection">No network connection.</string>
 	<string name="e_level_damaged">Looks like this level is damaged.\nYou can skip it and unlock next level.</string>
+	<string name="e_database_open_failed">Could not open the levels database. The app cannot start.</string>
 
 </resources>
