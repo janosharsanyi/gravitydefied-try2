@@ -117,6 +117,18 @@ public class ControllerInputHandler {
      *  {@link InputDevice#getId()}. */
     private final HashMap<Integer, int[]> rightStickAxesByDevice = new HashMap<>();
 
+    /** Most recent raw deflection of the left and right sticks, kept across
+     *  motion events so a single-source event can't silently zero the other
+     *  stick's contribution. Some pads expose left and right sticks under
+     *  different {@link InputDevice} sources (or fire separate events per
+     *  stick), and on those an event from the left source returns 0 for the
+     *  right-stick axes — without this cache, dual layouts would look like
+     *  only one joystick is active at a time because each event clobbered
+     *  the other stick's value via {@link #setAnalogInput} writing both
+     *  components together. The cache is only updated for axes the event's
+     *  source actually carries (see {@link #sourceHasAxis}). */
+    private float cachedLx = 0f, cachedLy = 0f, cachedRx = 0f, cachedRy = 0f;
+
     public ControllerInputHandler(GDActivity gd) {
         this.gd = gd;
     }
@@ -293,6 +305,9 @@ public class ControllerInputHandler {
     private boolean dispatchAnalogStick(MotionEvent event) {
         if (gd.gameView == null) return false;
 
+        final InputDevice device = event.getDevice();
+        final int source = event.getSource();
+
         // Live reads from Settings so the user can switch mode / deadzone /
         // layout / invert / flip in the options menu and feel the change
         // immediately on the next motion event. Cheap — five int pref reads.
@@ -335,11 +350,38 @@ public class ControllerInputHandler {
             throttleFromX = flipL;
         }
 
+        // Resolve which axes this event's source actually carries, then
+        // refresh only that half of the per-stick cache. Pads sometimes
+        // expose left and right sticks under different InputDevice sources
+        // (or fire separate events per stick); on those, an event from one
+        // source returns 0 for the other source's axes. Reading the cache
+        // for unreported axes prevents one stick's event from zeroing the
+        // other's contribution. For the common case where both sticks live
+        // under the same source, sourceHasAxis is true for both, the cache
+        // is fully refreshed every event, and behaviour is unchanged.
+        final int[] rightAxes = resolveRightStickAxes(device);
+        final boolean leftPresent = sourceHasAxis(device, source, MotionEvent.AXIS_X)
+                && sourceHasAxis(device, source, MotionEvent.AXIS_Y);
+        final boolean rightPresent = rightAxes[0] >= 0 && rightAxes[1] >= 0
+                && sourceHasAxis(device, source, rightAxes[0])
+                && sourceHasAxis(device, source, rightAxes[1]);
+        // HAT-only events (or any event whose source carries neither stick)
+        // shouldn't touch the analog channel. dispatchHat handles those.
+        if (!leftPresent && !rightPresent) return false;
+        if (leftPresent) {
+            cachedLx = event.getAxisValue(MotionEvent.AXIS_X);
+            cachedLy = event.getAxisValue(MotionEvent.AXIS_Y);
+        }
+        if (rightPresent) {
+            cachedRx = event.getAxisValue(rightAxes[0]);
+            cachedRy = event.getAxisValue(rightAxes[1]);
+        }
+
         float leanComponent;
         float throttleComponent;
         if (layout == Settings.STICK_LAYOUT_SINGLE) {
-            float ax = event.getAxisValue(MotionEvent.AXIS_X);
-            float ay = event.getAxisValue(MotionEvent.AXIS_Y);
+            float ax = cachedLx;
+            float ay = cachedLy;
             if (digital) {
                 // Per-axis deadzone — that's how a real d-pad behaves. Chord
                 // magnitude would conflate the two axes after snapping and
@@ -381,17 +423,15 @@ public class ControllerInputHandler {
                 throttleComponent = -throttleComponent;
             }
         } else {
-            // Right stick axes vary by pad — auto-resolve per device so
-            // both common conventions work without user calibration. If
-            // the pad has no right stick at all (e.g. single-stick pad
-            // with triggers on Z/RZ), resolveRightStickAxes returns
-            // sentinel -1 entries; treat those as 0 so trigger pressure
-            // can't leak into the throttle/lean channel.
-            int[] rightAxes = resolveRightStickAxes(event.getDevice());
-            float lx = event.getAxisValue(MotionEvent.AXIS_X);
-            float ly = event.getAxisValue(MotionEvent.AXIS_Y);
-            float rx = rightAxes[0] >= 0 ? event.getAxisValue(rightAxes[0]) : 0f;
-            float ry = rightAxes[1] >= 0 ? event.getAxisValue(rightAxes[1]) : 0f;
+            // Read each stick from the cache rather than the event so a
+            // single-source event preserves the other stick's last-known
+            // deflection (see the cache update above). For pads that put
+            // no right stick on any axis, cachedRx/cachedRy stay at 0 so
+            // trigger pressure can't leak into the throttle/lean channel.
+            float lx = cachedLx;
+            float ly = cachedLy;
+            float rx = cachedRx;
+            float ry = cachedRy;
             // Layout decides which stick drives which physics axis; flip
             // decides which physical axis on that stick to read. Default
             // physical axis is X for lean (the lateral motion), Y for
@@ -530,6 +570,19 @@ public class ControllerInputHandler {
         InputDevice.MotionRange range = device.getMotionRange(axis, InputDevice.SOURCE_JOYSTICK);
         if (range == null) return false;
         return range.getMin() < -0.5f && range.getMax() > 0.5f;
+    }
+
+    /** True if the event's {@code source} actually carries {@code axis} on
+     *  this {@code device}. Used to detect events that only cover one of
+     *  the two sticks: if the source doesn't expose an axis,
+     *  {@link MotionEvent#getAxisValue} silently returns 0 — which would
+     *  otherwise look like a real "stick centred" reading and clobber the
+     *  other stick's cached deflection. With a null device we fall back to
+     *  "assume present" so legacy/unknown pads keep the pre-fix behaviour
+     *  of trusting every event. */
+    private static boolean sourceHasAxis(InputDevice device, int source, int axis) {
+        if (device == null) return true;
+        return device.getMotionRange(axis, source) != null;
     }
 
     /** Single-axis deadzone + scaling for dual-stick layouts. The stick's
