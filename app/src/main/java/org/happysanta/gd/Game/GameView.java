@@ -1094,13 +1094,39 @@ public class GameView extends View {
 	}
 
 	public synchronized void keyPressed(int j) {
-		if (getGDActivity().isMenuShown() && menu != null)
+		// Snapshot menu state *before* dispatching: menu.keyPressed can
+		// call menuToGame() mid-call (e.g. FIRE on a "Resume" item),
+		// flipping isMenuShown() to false before the gate below would see
+		// it. Without this snapshot, the menu-closing keypress would still
+		// bleed into m_LaZ and perturb physics on the next _dovI tick —
+		// reproducible as a brief phantom lean on every pause-menu close
+		// in keysets 1 / 2 (where numpad-5 has gameplay meaning).
+		boolean wasInMenu = getGDActivity().isMenuShown();
+		if (wasInMenu && menu != null)
 			menu.keyPressed(j);
-		processKeyPressed(j);
+		// Skip gameplay key-state updates while a menu is up: m_LaZ /
+		// m_aeaZ should reflect what the user is holding *for gameplay*,
+		// and the menu has its own key-handling path. Releases stay
+		// unconditional below so a key held into the menu still clears
+		// cleanly when the user lets go.
+		if (!wasInMenu) processKeyPressed(j);
 	}
 
 	public synchronized void keyReleased(int j) {
 		processKeyReleased(j);
+	}
+
+	/**
+	 * Re-fire the merged input path with the current digital key state.
+	 * Idempotent: if {@link #m_LaZ} / {@link #m_aeaZ} already reflect what
+	 * physics has stored, this is a no-op. Used by
+	 * {@link GDActivity#menuToGame()} as a defensive resync — guards
+	 * against any code path where the physics engine's stored
+	 * {@code _aIIVAnalog} flags could drift from the user's actual held
+	 * keys across a menu transition.
+	 */
+	public synchronized void resyncMergedInput() {
+		_xavV();
 	}
 
 	/**

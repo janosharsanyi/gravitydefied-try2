@@ -164,8 +164,17 @@ public class ControllerInputHandler {
             case KeyEvent.KEYCODE_BUTTON_B:
                 // Menu: B = back (momentary, no held key). Game: B = brake.
                 if (gd.isMenuShown()) {
-                    if (down) gd.controllerBackPress();
-                    // No key tracking — back is a one-shot.
+                    if (down) {
+                        gd.controllerBackPress();
+                    } else {
+                        // A B-press recorded in-game (brake) can have its
+                        // matching release land here if the user paused
+                        // mid-brake. Drain the held entry so the engine
+                        // doesn't sit with m_LaZ[brakeKey]=true forever.
+                        // No-op if no in-game press was recorded for B.
+                        Integer prev = heldByButton.remove(code);
+                        if (prev != null && prev != 0) sendKey(prev, false);
+                    }
                 } else {
                     handleButton(code, brakeKey(), down);
                 }

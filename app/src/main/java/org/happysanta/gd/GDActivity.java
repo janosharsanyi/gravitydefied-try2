@@ -1797,6 +1797,14 @@ public class GDActivity extends ComponentActivity implements Runnable {
         updateBackCallbackEnabled();
 
         keyboardController.clearLogBuffer();
+
+        // Defensive resync: re-fire the merged input path so the physics
+        // engine's stored _aIIVAnalog flags match the user's currently-held
+        // digital keys at the moment we resume ticking _dovI. Idempotent
+        // when state is already consistent (which it should be, given that
+        // gameView.keyPressed snapshots menuShown and skips m_LaZ updates
+        // during the menu, while keyReleased always propagates).
+        if (gameView != null) gameView.resyncMergedInput();
     }
 
     /**
