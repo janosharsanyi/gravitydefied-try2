@@ -45,6 +45,7 @@
 
 	<string name="perspective">Perspective</string>
 	<string name="shadows">Shadows</string>
+	<string name="track_color">Track color</string>
 	<string name="driver_sprite">Driver sprite</string>
 	<string name="bike_sprite">Bike sprite</string>
 	<string name="input">Input</string>
@@ -192,6 +193,19 @@
 		<item>Blue Neon</item>
 		<item>Cyan Neon</item>
 		<item>Green Neon</item>
+	</string-array>
+
+	<!-- Order must match Settings.TRACK_COLOR_* constants. -->
+	<string-array name="track_color_options">
+		<item>Original</item>
+		<item>Green</item>
+		<item>Cyan</item>
+		<item>Red</item>
+		<item>Yellow</item>
+		<item>Lime</item>
+		<item>Blue</item>
+		<item>Gray</item>
+		<item>Black/White</item>
 	</string-array>
 
 	<string-array name="keyset">

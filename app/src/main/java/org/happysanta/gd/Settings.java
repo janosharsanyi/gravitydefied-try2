@@ -34,6 +34,34 @@ public class Settings {
 	public static final int SHADOW_MODE_NEON_GREEN = 7;
 	private static final String SHADOW_MODE = "shadow_mode";
 	private static final int SHADOW_MODE_DEFAULT = SHADOW_MODE_SHADOW;
+	// Track color preset. Original keeps the legacy single-color render
+	// (perspective-on draws one green line per segment, perspective-off the
+	// same in brighter green; no background contour, no across gradient).
+	// Every other preset opts in to the new 3-color render. Naming follows
+	// the visual depth of the two lines, *not* draw order:
+	//   - FG (foreground / lower) = the actual ground contour line, drawn
+	//     between adjacent ground points. Brighter of the two colors.
+	//   - BG (background / upper) = the raised perspective projection line,
+	//     drawn between the projected points. Darker of the two colors.
+	//   - Across tick is a gradient from FG (ground end) up to BG (raised
+	//     end). Per design rule the BG luma is always lower than the FG.
+	// FG/BG color values are HSL-matched against a cyan reference (FG ≈
+	// S=85% L=77%, BG ≈ S=23% L=48%), except Green which uses the original
+	// perspective color (#00AA00) as FG and the same hue dimmed by the
+	// cyan FG→BG ratio (~0.61) for BG. Black/White is theme-aware via
+	// isDarkModeEnabled.
+	public static final int TRACK_COLOR_ORIGINAL = 0;
+	public static final int TRACK_COLOR_GREEN = 1;
+	public static final int TRACK_COLOR_CYAN = 2;
+	public static final int TRACK_COLOR_RED = 3;
+	public static final int TRACK_COLOR_YELLOW = 4;
+	public static final int TRACK_COLOR_LIME = 5;
+	public static final int TRACK_COLOR_BLUE = 6;
+	public static final int TRACK_COLOR_GRAY = 7;
+	public static final int TRACK_COLOR_BW = 8;
+	private static final String TRACK_COLOR = "track_color";
+	private static final int TRACK_COLOR_DEFAULT = TRACK_COLOR_ORIGINAL;
+
 	// Floor for the neon "proximity" metric. m_rI in Level._ifiIV measures
 	// bike-body distance above ground — but the body sits above the wheels
 	// by frame_height even when riding normally, and *collapses* to ~0 when
@@ -131,6 +159,7 @@ public class Settings {
 	public static void resetAll() {
 		setPerspectiveEnabled(PERSPECTIVE_ENABLED_DEFAULT);
 		setShadowMode(SHADOW_MODE_DEFAULT);
+		setTrackColorMode(TRACK_COLOR_DEFAULT);
 		setDriverSpriteEnabled(DRIVER_SPRITE_ENABLED_DEFAULT);
 		setBikeSpriteEnabled(BIKE_SPRITE_ENABLED_DEFAULT);
 		setLookAheadEnabled(LOOK_AHEAD_ENABLED_DEFAULT);
@@ -183,6 +212,58 @@ public class Settings {
 			case SHADOW_MODE_NEON_BLUE:   return 0xff494BFD;
 			case SHADOW_MODE_NEON_CYAN:   return 0xff49FDE8;
 			case SHADOW_MODE_NEON_GREEN:  return 0xff54FD49;
+			default: return 0;
+		}
+	}
+
+	public static int getTrackColorMode() {
+		int mode = preferences.getInt(TRACK_COLOR, TRACK_COLOR_DEFAULT);
+		if (mode < TRACK_COLOR_ORIGINAL || mode > TRACK_COLOR_BW)
+			return TRACK_COLOR_DEFAULT;
+		return mode;
+	}
+
+	public static void setTrackColorMode(int mode) {
+		setInt(TRACK_COLOR, mode);
+	}
+
+	// 0xAARRGGBB color for the FOREGROUND line — drawn between actual
+	// ground points (the lower / front line visually). Brighter of the
+	// two preset colors. 0 for ORIGINAL (callers must special-case ORIGINAL
+	// — it falls through to the legacy single-color render path).
+	public static int getTrackForegroundArgb(int mode) {
+		switch (mode) {
+			case TRACK_COLOR_GREEN:  return 0xff00AA00;
+			case TRACK_COLOR_CYAN:   return 0xff94E6F6;
+			case TRACK_COLOR_RED:    return 0xffF69494;
+			case TRACK_COLOR_YELLOW: return 0xffF6F694;
+			case TRACK_COLOR_LIME:   return 0xff94F694;
+			case TRACK_COLOR_BLUE:   return 0xff9494F6;
+			case TRACK_COLOR_GRAY:   return 0xffC4C4C4;
+			// BW: FG must be lighter than BG (rule: BG always darker). In dark
+			// mode FG=white on the lower/ground line is the prominent stroke
+			// against the black canvas; in light mode FG=mid-gray recedes
+			// against white while the BG=black line on the raised/upper
+			// position is the prominent one.
+			case TRACK_COLOR_BW:     return isDarkModeEnabled() ? 0xffFFFFFF : 0xff666666;
+			default: return 0;
+		}
+	}
+
+	// 0xAARRGGBB color for the BACKGROUND line — drawn between the raised
+	// perspective-projected points (the upper / back line visually); also
+	// the raised-end of the across gradient. Darker of the two preset
+	// colors. 0 for ORIGINAL.
+	public static int getTrackBackgroundArgb(int mode) {
+		switch (mode) {
+			case TRACK_COLOR_GREEN:  return 0xff006900;
+			case TRACK_COLOR_CYAN:   return 0xff5E8C96;
+			case TRACK_COLOR_RED:    return 0xff965E5E;
+			case TRACK_COLOR_YELLOW: return 0xff96965E;
+			case TRACK_COLOR_LIME:   return 0xff5E965E;
+			case TRACK_COLOR_BLUE:   return 0xff5E5E96;
+			case TRACK_COLOR_GRAY:   return 0xff7A7A7A;
+			case TRACK_COLOR_BW:     return isDarkModeEnabled() ? 0xff999999 : 0xff000000;
 			default: return 0;
 		}
 	}

@@ -82,6 +82,15 @@ Gameplay visuals
   invert the brightness ramp — close to ground glows in the neon base
   color, fading to a dark gray (#363636) as the bike rises. Default
   stays "Shadow" so the original behavior is preserved.
+- Track-color preset added (Original / Green / Cyan / Red / Yellow /
+  Lime / Blue / Gray / Black/White). Original keeps the legacy
+  single-color render. Every other preset opts in to a 3-color render:
+  a new background contour line is drawn between the actual ground
+  points, the across tick is rendered as a gradient from background
+  color (ground end) to foreground color (raised end), and the
+  foreground raised line uses the preset's foreground color. Black/White
+  is theme-aware (white in dark mode, black in light mode). Default
+  stays "Original" so the original behavior is preserved bit-for-bit.
 
 Other
 - Cosmetic / clarity comments added at sites where an API change forced a

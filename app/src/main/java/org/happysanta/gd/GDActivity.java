@@ -401,7 +401,7 @@ public class GDActivity extends ComponentActivity implements Runnable {
             portedTextView.setTypeface(Global.robotoCondensedTypeface);
             portedTextView.setTextSize(15);
             portedTextView.setLineSpacing(0f, 1.2f);
-            portedTextView.setText(Html.fromHtml(getString(R.string.ported_text)));
+            applyPortedText();
             portedTextView.setGravity(Gravity.CENTER);
             portedTextView.setLayoutParams(new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
             portedTextView.setPadding(0, 0, 0, Helpers.getDp(10));
@@ -1376,6 +1376,20 @@ public class GDActivity extends ComponentActivity implements Runnable {
      *
      * <p>Safe to call from any thread.
      */
+    // Reload the "Ported by" splash strip with a dark-mode-aware highlight.
+    // The string resource hardcodes #000000 for the names (readable on the
+    // light-mode white background) and #999999 for the dim "Ported by" / "and"
+    // labels (readable on either background, so left alone). In dark mode we
+    // swap #000000 → #FFFFFF so the names don't disappear into the black bg.
+    // Safe to call before portedTextView is constructed (no-op).
+    private void applyPortedText() {
+        if (portedTextView == null) return;
+        String html = getString(R.string.ported_text);
+        if (Settings.isDarkModeEnabled())
+            html = html.replace("#000000", "#FFFFFF");
+        portedTextView.setText(Html.fromHtml(html));
+    }
+
     public void applyDarkMode() {
         runOnUiThread(new Runnable() {
             @Override
@@ -1384,6 +1398,10 @@ public class GDActivity extends ComponentActivity implements Runnable {
                 int fg = Settings.getMenuFgColor();
                 if (frame != null) frame.setBackgroundColor(bg);
                 if (menuTitleTextView != null) menuTitleTextView.setTextColor(fg);
+                // The "Ported by" splash strip uses inline HTML colors —
+                // re-render it with a dark-mode-aware highlight so the
+                // names stay legible on the new background.
+                applyPortedText();
                 // Walk every known menu screen's layout, not just the one
                 // currently mounted — each MenuScreen caches its own
                 // LinearLayout with TextViews that hold a frozen

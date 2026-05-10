@@ -75,6 +75,7 @@ public class Menu
 	private ActionMenuElement startItem;
 	private OptionsMenuElement perspectiveOptionItem;
 	private OptionsMenuElement shadowModeOptionItem;
+	private OptionsMenuElement trackColorOptionItem;
 	private OptionsMenuElement driverSpriteOptionItem;
 	private OptionsMenuElement bikeSpriteOptionItem;
 	private OptionsMenuElement inputOptionItem;
@@ -144,6 +145,7 @@ public class Menu
 	private String[] keypadSideStrings = null;
 	private String[] controllerAutohideStrings = null;
 	private String[] shadowModeStrings = null;
+	private String[] trackColorStrings = null;
 	// private EmptyLineMenuElement emptyLine;
 	// private EmptyLineMenuElement emptyLineBeforeAction;
 	// private AlertDialog alertDialog = null;
@@ -185,6 +187,7 @@ public class Menu
 				keypadSideStrings = getStringArray(R.array.keypad_side_options);
 				controllerAutohideStrings = getStringArray(R.array.controller_autohide_options);
 				shadowModeStrings = getStringArray(R.array.shadow_mode_options);
+				trackColorStrings = getStringArray(R.array.track_color_options);
 				difficultyLevels = getStringArray(R.array.difficulty);
 
 				// saveManager = new SaveManager();
@@ -310,6 +313,7 @@ public class Menu
 				}
 				getLevelLoader().setPerspectiveEnabled(Settings.isPerspectiveEnabled());
 				getLevelLoader().setShadowMode(Settings.getShadowMode());
+				getLevelLoader().setTrackColorMode(Settings.getTrackColorMode());
 				activity.physEngine._ifZV(Settings.isLookAheadEnabled());
 				getGDView().setInputOption(Settings.getInputOption());
 				// getGDView()._aZV(m_aTB == 0);
@@ -391,6 +395,7 @@ public class Menu
 				// 	softwareJoystickOptionItem = new ActionMenuElement("Software Joystick", m_aTB, this, onOffStrings, true, activity, optionsMenu, false);
 				perspectiveOptionItem = new OptionsMenuElement(getString(R.string.perspective), Settings.isPerspectiveEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				shadowModeOptionItem = new OptionsMenuElement(getString(R.string.shadows), Settings.getShadowMode(), this, shadowModeStrings, false, optionsMenu);
+				trackColorOptionItem = new OptionsMenuElement(getString(R.string.track_color), Settings.getTrackColorMode(), this, trackColorStrings, false, optionsMenu);
 				driverSpriteOptionItem = new OptionsMenuElement(getString(R.string.driver_sprite), Settings.isDriverSpriteEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				bikeSpriteOptionItem = new OptionsMenuElement(getString(R.string.bike_sprite), Settings.isBikeSpriteEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				inputOptionItem = new OptionsMenuElement(getString(R.string.input), Settings.getInputOption(), this, keysetStrings, false, optionsMenu);
@@ -407,6 +412,7 @@ public class Menu
 				//	optionsMenu.addItem(softwareJoystickOptionItem);
 				optionsMenu.addItem(perspectiveOptionItem);
 				optionsMenu.addItem(shadowModeOptionItem);
+				optionsMenu.addItem(trackColorOptionItem);
 				optionsMenu.addItem(driverSpriteOptionItem);
 				optionsMenu.addItem(bikeSpriteOptionItem);
 				optionsMenu.addItem(inputOptionItem);
@@ -1264,6 +1270,18 @@ public class Menu
 			int mode = shadowModeOptionItem.getSelectedOption();
 			getLevelLoader().setShadowMode(mode);
 			Settings.setShadowMode(mode);
+			return;
+		}
+		if (item == trackColorOptionItem) {
+			// Multi-state cycle (Original + 8 presets): same
+			// _charvZ()-then-advance pattern as the shadow option.
+			if (trackColorOptionItem._charvZ()) {
+				trackColorOptionItem.setSelectedOption(
+						trackColorOptionItem.getSelectedOption() + 1);
+			}
+			int mode = trackColorOptionItem.getSelectedOption();
+			getLevelLoader().setTrackColorMode(mode);
+			Settings.setTrackColorMode(mode);
 			return;
 		}
 		if (item == driverSpriteOptionItem) {
