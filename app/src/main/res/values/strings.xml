@@ -51,6 +51,7 @@
 	<string name="look_ahead">Look ahead</string>
 	<string name="vibrate_on_touch">Vibrate on touch</string>
 	<string name="keyboard_in_menu">Keyboard in menu</string>
+	<string name="keypad_landscape_side">Keypad side (landscape)</string>
 	<string name="clear_highscore">Clear highscore</string>
 	<string name="full_reset">Full Reset</string>
 	<string name="reset">Reset</string>
@@ -182,6 +183,11 @@
 		<item>Keyset 1</item>
 		<item>Keyset 2</item>
 		<item>Keyset 3</item>
+	</string-array>
+
+	<string-array name="keypad_side_options">
+		<item>Normal</item>
+		<item>Flipped</item>
 	</string-array>
 
 	<string-array name="leagues">

@@ -36,6 +36,17 @@ public class Settings {
 	private static final String KEYBOARD_IN_MENU_ENABLED = "keyboard_enabled";
 	private static final boolean KEYBOARD_IN_MENU_ENABLED_DEFAULT = true;
 
+	// Landscape-only setting: which side of the screen the on-screen keypad
+	// In landscape "split-keypad" mode, controls which cluster lands on
+	// which screen edge. 0 = normal (cluster A on left, B on right —
+	// matches the layout described in MIGRATION_PLAN.md), 1 = flipped
+	// (A and B swapped). Ignored in portrait, where the keypad always
+	// docks to the bottom edge as a single grid.
+	public static final int KEYPAD_SIDE_NORMAL = 0;
+	public static final int KEYPAD_SIDE_FLIPPED = 1;
+	private static final String KEYPAD_LANDSCAPE_SIDE = "keypad_landscape_side";
+	private static final int KEYPAD_LANDSCAPE_SIDE_DEFAULT = KEYPAD_SIDE_NORMAL;
+
 	private static final String LAST_SEND_STATS = "last_send_stats";
 	private static final long LAST_SEND_STATS_DEFAULT = 0;
 
@@ -60,6 +71,7 @@ public class Settings {
 		setLookAheadEnabled(LOOK_AHEAD_ENABLED_DEFAULT);
 		setVibrateOnTouchEnabled(VIBRATE_ENABLED_DEFAULT);
 		setKeyboardInMenuEnabled(KEYBOARD_IN_MENU_ENABLED_DEFAULT);
+		setKeypadLandscapeSide(KEYPAD_LANDSCAPE_SIDE_DEFAULT);
 		setInputOption(INPUT_OPTION_DEFAULT);
 		setLevelsSort(LEVELS_SORT_DEFAULT);
 		setName(NAME_CHARS_DEFALUT);
@@ -119,6 +131,14 @@ public class Settings {
 
 	public static void setKeyboardInMenuEnabled(boolean enabled) {
 		setBoolean(KEYBOARD_IN_MENU_ENABLED, enabled);
+	}
+
+	public static int getKeypadLandscapeSide() {
+		return preferences.getInt(KEYPAD_LANDSCAPE_SIDE, KEYPAD_LANDSCAPE_SIDE_DEFAULT);
+	}
+
+	public static void setKeypadLandscapeSide(int side) {
+		setInt(KEYPAD_LANDSCAPE_SIDE, side);
 	}
 
 	public static boolean isVibrateOnTouchEnabled() {
