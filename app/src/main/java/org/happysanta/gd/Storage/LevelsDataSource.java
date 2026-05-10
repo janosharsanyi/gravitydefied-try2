@@ -65,8 +65,19 @@ public class LevelsDataSource {
 
 	public synchronized void deleteLevel(Level level) {
 		long id = level.getId();
-		db.delete(LevelsSQLiteOpenHelper.TABLE_LEVELS, LevelsSQLiteOpenHelper.LEVELS_COLUMN_ID + " = " + id, null);
-		db.delete(LevelsSQLiteOpenHelper.TABLE_HIGHSCORES, LevelsSQLiteOpenHelper.HIGHSCORES_COLUMN_LEVEL_ID + " = " + id, null);
+		// Wrap the two deletes in a transaction so we can't lose a level
+		// row but keep its highscore rows (or vice versa). Without FK
+		// constraints (we don't enable PRAGMA foreign_keys here), this
+		// transaction is the only thing keeping the cascade atomic if the
+		// second delete hits a DB-locked / disk-full error.
+		db.beginTransaction();
+		try {
+			db.delete(LevelsSQLiteOpenHelper.TABLE_LEVELS, LevelsSQLiteOpenHelper.LEVELS_COLUMN_ID + " = " + id, null);
+			db.delete(LevelsSQLiteOpenHelper.TABLE_HIGHSCORES, LevelsSQLiteOpenHelper.HIGHSCORES_COLUMN_LEVEL_ID + " = " + id, null);
+			db.setTransactionSuccessful();
+		} finally {
+			db.endTransaction();
+		}
 	}
 
 	// This will also reset auto increment counter

@@ -9,7 +9,12 @@ import java.util.Vector;
 
 public class LevelsResponse {
 
-	protected Level levels[] = null;
+	// Initialize to empty rather than null. The outer try in parse() can
+	// throw before reaching the finally that publishes the parsed array
+	// (e.g., server omits index [1] of the response, or the items array
+	// is missing) — leaving the field null caused NPEs in callers that
+	// pass getLevels() straight into an AsyncTask varargs.
+	protected Level levels[] = new Level[0];
 	protected int totalCount = 0;
 
 	public LevelsResponse(Response response) {
