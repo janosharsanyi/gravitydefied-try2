@@ -85,7 +85,7 @@ public class OptionsMenuElement
 		);
 
 		lockImage = new MenuImageView(context);
-		lockImage.setImageResource(ActionMenuElement.locks[0]);
+		lockImage.setImageResource(ActionMenuElement.idleLockResource());
 		lockImage.setScaleType(ImageView.ScaleType.CENTER);
 		lockImage.setVisibility(View.GONE);
 
@@ -295,7 +295,14 @@ public class OptionsMenuElement
 
 	@Override
 	protected void onHighlightChanged() {
-		lockImage.setImageResource(ActionMenuElement.locks[isHighlighted ? 2 : 0]);
+		lockImage.setImageResource(
+				isHighlighted ? ActionMenuElement.locks[2] : ActionMenuElement.idleLockResource());
+	}
+
+	public void refreshLockIcon() {
+		if (lockImage != null && lockImage.getVisibility() == View.VISIBLE && !isHighlighted) {
+			lockImage.setImageResource(ActionMenuElement.idleLockResource());
+		}
 	}
 
 }

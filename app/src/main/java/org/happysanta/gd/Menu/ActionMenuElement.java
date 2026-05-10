@@ -7,6 +7,7 @@ import android.widget.LinearLayout;
 import org.happysanta.gd.Menu.Views.MenuImageView;
 import org.happysanta.gd.Menu.Views.MenuTextView;
 import org.happysanta.gd.R;
+import org.happysanta.gd.Settings;
 
 import static org.happysanta.gd.Helpers.getDp;
 import static org.happysanta.gd.Helpers.getGDActivity;
@@ -91,12 +92,31 @@ public class ActionMenuElement
 		this.handler = hander;
 	}
 
+	/**
+	 * Pick the idle (non-highlighted) lock icon for the current theme:
+	 * dark mode → lighter {@code s_lock1}, light mode → black {@code s_lock0}.
+	 * Highlighted state stays {@code s_lock2} (green) in both themes.
+	 */
+	public static int idleLockResource() {
+		return Settings.isDarkModeEnabled() ? locks[1] : locks[0];
+	}
+
+	// flag1 (formerly isBlackLock) is kept for source-compat with existing
+	// callers but is now ignored — the icon variant follows the dark-mode
+	// setting instead. refreshLockIcon() repaints already-built screens
+	// when the user toggles dark mode.
 	public void setLock(boolean flag, boolean flag1) {
 		isLocked = flag;
 		isBlackLock = flag1;
 
 		lockImage.setVisibility(isLocked ? View.VISIBLE : View.GONE);
-		lockImage.setImageResource(locks[isBlackLock ? 0 : 1]);
+		lockImage.setImageResource(idleLockResource());
+	}
+
+	public void refreshLockIcon() {
+		if (isLocked && !isHighlighted) {
+			lockImage.setImageResource(idleLockResource());
+		}
 	}
 
 	@Override
@@ -116,7 +136,7 @@ public class ActionMenuElement
 
 	@Override
 	protected void onHighlightChanged() {
-		lockImage.setImageResource(locks[isHighlighted ? 2 : (isBlackLock ? 0 : 1)]);
+		lockImage.setImageResource(isHighlighted ? locks[2] : idleLockResource());
 	}
 
 	@Override

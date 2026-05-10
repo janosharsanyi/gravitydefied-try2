@@ -1069,6 +1069,9 @@ public class Menu
 		for (MenuScreen s : screens) {
 			if (s != null && s.getLayout() != null) {
 				gd.repaintMenuTextViews(s.getLayout(), fg);
+				// Lock icon variant tracks dark mode too — repaint each
+				// item's icon (no-op when no lock is shown).
+				s.refreshLockIcons();
 			}
 		}
 	}

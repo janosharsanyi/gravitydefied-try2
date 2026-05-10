@@ -59,6 +59,23 @@ public class MenuScreen
 			((ClickableMenuElement) item).setOnHighlightListener(this);
 	}
 
+	/**
+	 * Re-pick the lock icon for the current dark-mode state on every
+	 * lockable item in this screen. Called from
+	 * {@link Menu#refreshAllScreenColors()} when the user toggles dark
+	 * mode, so screens that were already built keep the right variant.
+	 */
+	public void refreshLockIcons() {
+		for (int i = 0; i < menuItems.size(); i++) {
+			Object item = menuItems.elementAt(i);
+			if (item instanceof ActionMenuElement) {
+				((ActionMenuElement) item).refreshLockIcon();
+			} else if (item instanceof OptionsMenuElement) {
+				((OptionsMenuElement) item).refreshLockIcon();
+			}
+		}
+	}
+
 	protected void scrollToItem(MenuElement item) {
 		// int y = item.getView().getTop();
 		// logDebug("scrollTo: y = " + y);
