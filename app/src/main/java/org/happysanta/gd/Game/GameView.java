@@ -858,24 +858,12 @@ public class GameView extends View {
 
 	// Draw boot logos and something else
 	public void drawGame(Canvas g) {
-		// Use this view's owning activity, NOT GDActivity.shared. During a
-		// restartApp() handover the OLD activity's view tree can still
-		// receive a final draw after onCreate of the NEW activity has
-		// already run `shared = this`. If we sourced `gd` from the static
-		// `shared`, the alive/m_caseZ guard would read the new activity's
-		// state (alive=true, m_caseZ=false) and let the orphaned old view
-		// through to the level-render path — where the chain bottoms out
-		// in Helpers.getLevelLoader() reading shared.levelLoader, which is
-		// null until the new activity's bg init populates it. Result was
-		// an NPE in Level._aiV. Reading `activity` instead pins the guard
-		// to this view's actual owner, so the old view sees alive=false
-		// (set synchronously at the top of destroyApp) and bails.
-		final GDActivity gd = activity;
+		final GDActivity gd = getGDActivity();
 		label0:
 		{
 			int j;
 			synchronized (m_ocObject) {
-				if (gd != null && gd.alive && !gd.m_caseZ)
+				if (gd.alive && !gd.m_caseZ)
 					break label0;
 			}
 			return;
@@ -1195,26 +1183,6 @@ public class GameView extends View {
 
 	@Override
 	public void onDraw(Canvas g) {
-		// Orphan-view guard. During a restartApp() handover the framework
-		// can still fire draw frames on the OLD activity's view tree
-		// between finish() and the OS actually tearing it down. Any
-		// reach into Helpers.getLevelLoader/getGDActivity/getGDView from
-		// inside the render chain reads through GDActivity.shared, which
-		// has already been repointed to the NEW activity in NEW.onCreate
-		// (line ~191) but whose levelLoader/menu/etc. don't get populated
-		// until the bg init thread completes (line ~586+). Reading null
-		// state from there has caused NPEs deep in the render path
-		// (e.g. Level._aiV → Loader.getTrackColorMode on null).
-		//
-		// We pin liveness to THIS view's owning activity (`activity`,
-		// set in the constructor at line ~239) rather than the static
-		// `shared`, so an orphaned old view correctly sees its own
-		// owner's alive=false (set synchronously at the top of
-		// destroyApp) and bails before entering any render code that
-		// might dereference the stale singleton.
-		if (activity == null || !activity.alive || activity.m_caseZ) {
-			return;
-		}
 		g.save();
 		if (!Global.DISABLE_SCALING)
 			g.scale(Global.density, Global.density);

@@ -868,6 +868,22 @@ public class GDActivity extends ComponentActivity implements Runnable {
         super.onDestroy();
         Helpers.logDebug("@@@ [GDActivity " + hashCode() + "] onDestroy()");
         destroyApp(false);
+
+        // Serialized restart: launch the replacement activity here, after
+        // this one is fully torn down. Doing it any earlier (e.g. straight
+        // after finish() in destroyApp's runnable, as we used to) lets the
+        // new activity's onCreate run while this activity's view tree is
+        // still attached and able to draw — orphan render callbacks then
+        // read state through the static GDActivity.shared singleton, which
+        // the new onCreate has already repointed at itself but whose
+        // levelLoader/menu/etc. don't get populated until its background
+        // init thread completes. NPEs in the render path were the result.
+        // Waiting for our own onDestroy guarantees the OLD view tree is
+        // gone before NEW.onCreate runs, which fully closes the race
+        // (see MIGRATION_PLAN.md §14).
+        if (restartingStarted) {
+            doRestartApp();
+        }
     }
 
     @Override
@@ -1193,9 +1209,9 @@ public class GDActivity extends ComponentActivity implements Runnable {
                         finish();
                     }
 
-                    if (restart) {
-                        doRestartApp();
-                    }
+                    // Note: when restart==true, the new activity is launched
+                    // from {@link #onDestroy()} — NOT here. See {@link
+                    // #doRestartApp()} for why we serialize the handover.
                 }
             }
         });
@@ -1980,14 +1996,32 @@ public class GDActivity extends ComponentActivity implements Runnable {
     }
 
     private void doRestartApp() {
-        // Old code scheduled an AlarmManager + PendingIntent to relaunch the activity 100ms
-        // after finish(). On modern Android (12+) inexact alarms from background apps are
-        // heavily throttled and frequently never fire — symptom: app exits, never restarts.
-        // Plain startActivity() with NEW_TASK | CLEAR_TASK works synchronously and is what
-        // the AlarmManager hack was emulating anyway.
-        Intent restart = new Intent(this, GDActivity.class);
+        // Old upstream code scheduled an AlarmManager + PendingIntent to
+        // relaunch the activity 100 ms after finish(). On modern Android
+        // (12+) inexact alarms from background apps are heavily throttled
+        // and frequently never fire — symptom: app exits, never restarts.
+        //
+        // We replaced that with a direct startActivity(), but timing
+        // matters: this method is called from {@link #onDestroy()}, which
+        // means by the time we enqueue the new-activity intent the OLD
+        // activity's view tree is already detached. That's the invariant
+        // the AlarmManager-100 ms hack used to provide implicitly (the
+        // delay was almost always enough for onDestroy to complete) and
+        // that we now provide explicitly by tying the launch to onDestroy.
+        // Without this serialization, the NEW activity's onCreate runs
+        // while the OLD view tree is still alive, repoints
+        // GDActivity.shared at itself before its bg init populates
+        // levelLoader/menu/etc., and any orphan draw on the OLD view tree
+        // dereferences the half-built singleton → NPE. See
+        // MIGRATION_PLAN.md §14 for the full root-cause writeup.
+        //
+        // Use the application context: by this point the activity is
+        // post-super.onDestroy() and we shouldn't lean on its lifecycle
+        // for outgoing intents. NEW_TASK is set so a fresh task is
+        // created (singleInstance launchMode + the OLD task is gone).
+        Intent restart = new Intent(getApplicationContext(), GDActivity.class);
         restart.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(restart);
+        getApplicationContext().startActivity(restart);
     }
 
     private void sendStats() {
