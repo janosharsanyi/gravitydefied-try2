@@ -78,6 +78,24 @@ public class NameInputMenuScreen extends MenuScreen {
 		return textView;
 	}
 
+	@Override
+	public void onShow() {
+		super.onShow();
+		// Re-apply text colors every time the screen is shown. The 6 text
+		// views here (3 letters + 3 cursor slots) live in nested
+		// MenuLinearLayouts whose addView() posts async to the UI thread,
+		// so the global dark-mode refresh walk in
+		// GDActivity.repaintMenuTextViews() can race the screen
+		// construction. Refreshing on show guarantees the letters / cursor
+		// match the current theme by the time the user sees them, even on
+		// the first entry after a top-3 finish.
+		int fg = Settings.getMenuFgColor();
+		for (int i = 0; i < 3; i++) {
+			if (nameTextViews[i] != null) nameTextViews[i].setTextColor(fg);
+			if (cursorTextViews[i] != null) cursorTextViews[i].setTextColor(fg);
+		}
+	}
+
 	protected static int getWordWidth() {
 		Context context = getGDActivity();
 
