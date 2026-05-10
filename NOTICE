@@ -68,6 +68,36 @@ Input
   the analog magnitude path off entirely (Analog / Digital) — Digital
   snaps each axis past the deadzone to ±1 / 0 so the stick behaves
   like the d-pad while still going through the analog channel.
+  "Stick layout" option (Single / Dual lean-L gas-R / Dual gas-L
+  lean-R) optionally routes throttle and lean to separate physical
+  sticks so the player can adjust both simultaneously without thumb
+  conflict; right stick axes auto-resolved per device (AXIS_Z/AXIS_RZ
+  or AXIS_RX/AXIS_RY, whichever the pad declares as bipolar via
+  InputDevice.getMotionRange), so both common conventions work
+  without user calibration; in dual modes each stick is treated as
+  1D (its other axis ignored entirely, including for the deadzone
+  check) so drift on the unused axis can never leak into physics.
+  Default Single preserves the original one-stick behaviour.
+  Two transforms compose with the layout, both per source stick:
+  "Stick invert" (None / Left / Right / All) flips the sign of the
+  affected stick's post-scale output; "Stick X/Y swap" (None / Left
+  / Right / Both) swaps which physical axis on the affected stick
+  feeds the physics quantity the layout assigns to it. In Single
+  mode the right-stick toggles are no-ops. Both default to None.
+- Analog input drives the rider's visual posture proportionally:
+  the rest-length presets (Physics m_Hak[*].m_forI) and the visual
+  lean accumulator (m_TI) are now lerped between neutral and the
+  fully-leaned target by the analog magnitude, so partial stick
+  deflection produces a partial lean rather than snapping to the
+  extreme posture as the original categorical assignment did.
+  Digital input still resolves to the full preset bit-for-bit.
+- Per-axis input merge: digital input (keyboard / on-screen keypad /
+  controller buttons / touch virtual-d-pad) takes priority over the
+  analog stick on whichever physics axis it touches, while the other
+  axis continues to read from the stick. Implemented in
+  GameView.applyMergedInput so all input paths funnel through a
+  single merge point. Lets the player hold a button for full gas /
+  brake while the stick still drives lean (and vice versa).
 - On-screen keypad reworked: bottom-anchored in both orientations
   (single strip in portrait, two corner clusters in landscape), with new
   user setting "Auto-hide keypad after" (Show / Hide / 5/10/15/30s)

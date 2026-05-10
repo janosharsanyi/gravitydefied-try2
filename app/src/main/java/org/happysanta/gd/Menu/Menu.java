@@ -84,6 +84,9 @@ public class Menu
 	private OptionsMenuElement keypadLandscapeSideOptionItem;
 	private OptionsMenuElement controllerAutohideOptionItem;
 	private OptionsMenuElement stickModeOptionItem;
+	private OptionsMenuElement stickLayoutOptionItem;
+	private OptionsMenuElement stickInvertOptionItem;
+	private OptionsMenuElement stickAxisFlipOptionItem;
 	private OptionsMenuElement stickDeadzoneOptionItem;
 	private OptionsMenuElement immersiveModeOptionItem;
 	private OptionsMenuElement darkModeOptionItem;
@@ -147,6 +150,8 @@ public class Menu
 	private String[] keypadSideStrings = null;
 	private String[] controllerAutohideStrings = null;
 	private String[] stickModeStrings = null;
+	private String[] stickLayoutStrings = null;
+	private String[] stickLrStrings = null;
 	private String[] stickDeadzoneStrings = null;
 	private String[] shadowModeStrings = null;
 	private String[] trackColorStrings = null;
@@ -191,6 +196,8 @@ public class Menu
 				keypadSideStrings = getStringArray(R.array.keypad_side_options);
 				controllerAutohideStrings = getStringArray(R.array.controller_autohide_options);
 				stickModeStrings = getStringArray(R.array.stick_mode_options);
+				stickLayoutStrings = getStringArray(R.array.stick_layout_options);
+				stickLrStrings = getStringArray(R.array.stick_lr_options);
 				stickDeadzoneStrings = getStringArray(R.array.stick_deadzone_options);
 				shadowModeStrings = getStringArray(R.array.shadow_mode_options);
 				trackColorStrings = getStringArray(R.array.track_color_options);
@@ -411,6 +418,9 @@ public class Menu
 				keypadLandscapeSideOptionItem = new OptionsMenuElement(getString(R.string.keypad_landscape_side), Settings.getKeypadLandscapeSide(), this, keypadSideStrings, false, optionsMenu);
 				controllerAutohideOptionItem = new OptionsMenuElement(getString(R.string.controller_autohide), controllerAutohideIndexFromSeconds(Settings.getControllerAutoHideTimeoutSec()), this, controllerAutohideStrings, false, optionsMenu);
 				stickModeOptionItem = new OptionsMenuElement(getString(R.string.stick_mode), Settings.getStickMode(), this, stickModeStrings, false, optionsMenu);
+				stickLayoutOptionItem = new OptionsMenuElement(getString(R.string.stick_layout), Settings.getStickLayout(), this, stickLayoutStrings, false, optionsMenu);
+				stickInvertOptionItem = new OptionsMenuElement(getString(R.string.stick_invert), Settings.getStickInvert(), this, stickLrStrings, false, optionsMenu);
+				stickAxisFlipOptionItem = new OptionsMenuElement(getString(R.string.stick_axis_flip), Settings.getStickAxisFlip(), this, stickLrStrings, false, optionsMenu);
 				stickDeadzoneOptionItem = new OptionsMenuElement(getString(R.string.stick_deadzone), stickDeadzoneIndexFromPct(Settings.getStickDeadzonePct()), this, stickDeadzoneStrings, false, optionsMenu);
 				immersiveModeOptionItem = new OptionsMenuElement(getString(R.string.immersive_mode), Settings.isImmersiveModeEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				darkModeOptionItem = new OptionsMenuElement(getString(R.string.dark_mode), Settings.isDarkModeEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
@@ -430,6 +440,9 @@ public class Menu
 				optionsMenu.addItem(keypadLandscapeSideOptionItem);
 				optionsMenu.addItem(controllerAutohideOptionItem);
 				optionsMenu.addItem(stickModeOptionItem);
+				optionsMenu.addItem(stickLayoutOptionItem);
+				optionsMenu.addItem(stickInvertOptionItem);
+				optionsMenu.addItem(stickAxisFlipOptionItem);
 				optionsMenu.addItem(stickDeadzoneOptionItem);
 				optionsMenu.addItem(immersiveModeOptionItem);
 				optionsMenu.addItem(darkModeOptionItem);
@@ -1255,6 +1268,36 @@ public class Menu
 						stickModeOptionItem.getSelectedOption() + 1);
 			}
 			Settings.setStickMode(stickModeOptionItem.getSelectedOption());
+			return;
+		}
+		if (item == stickLayoutOptionItem) {
+			// Click cycles through Single / Dual lean-L / Dual gas-L. Same
+			// advance pattern as the other multi-state options; the
+			// controller re-reads Settings on every motion event so no
+			// notify is needed.
+			if (stickLayoutOptionItem._charvZ()) {
+				stickLayoutOptionItem.setSelectedOption(
+						stickLayoutOptionItem.getSelectedOption() + 1);
+			}
+			Settings.setStickLayout(stickLayoutOptionItem.getSelectedOption());
+			return;
+		}
+		if (item == stickInvertOptionItem) {
+			// Click cycles through None / Left / Right / All.
+			if (stickInvertOptionItem._charvZ()) {
+				stickInvertOptionItem.setSelectedOption(
+						stickInvertOptionItem.getSelectedOption() + 1);
+			}
+			Settings.setStickInvert(stickInvertOptionItem.getSelectedOption());
+			return;
+		}
+		if (item == stickAxisFlipOptionItem) {
+			// Click cycles through None / Left / Right / Both.
+			if (stickAxisFlipOptionItem._charvZ()) {
+				stickAxisFlipOptionItem.setSelectedOption(
+						stickAxisFlipOptionItem.getSelectedOption() + 1);
+			}
+			Settings.setStickAxisFlip(stickAxisFlipOptionItem.getSelectedOption());
 			return;
 		}
 		if (item == stickDeadzoneOptionItem) {

@@ -106,6 +106,15 @@ public class ControllerInputHandler {
      *  would otherwise stomp any concurrent keyboard input. */
     private boolean analogActive = false;
 
+    /** Per-device cache of which axes carry the right stick. Most pads
+     *  report it on {@link MotionEvent#AXIS_Z} / {@link MotionEvent#AXIS_RZ},
+     *  some on {@link MotionEvent#AXIS_RX} / {@link MotionEvent#AXIS_RY}, and
+     *  a few put trigger pressure on Z/RZ instead. {@link #resolveRightStickAxes}
+     *  picks the bipolar pair on first sight of a device and stashes the
+     *  answer here so we don't reprobe every motion event. Keyed by
+     *  {@link InputDevice#getId()}. */
+    private final HashMap<Integer, int[]> rightStickAxesByDevice = new HashMap<>();
+
     public ControllerInputHandler(GDActivity gd) {
         this.gd = gd;
     }
@@ -237,50 +246,145 @@ public class ControllerInputHandler {
         return changed;
     }
 
-    /** Left stick → analog physics channel. Suppressed in menu.
-     *  Stick mode (Settings.getStickMode) selects between analog
-     *  magnitude-proportional output and digital ±1/0 snap. */
+    /** Analog stick(s) → physics channel. Suppressed in menu.
+     *
+     *  <p>The {@link Settings#getStickLayout layout} setting selects between:
+     *  <ul>
+     *    <li>{@code SINGLE}: left stick X = lean, Y = throttle. 2D radial
+     *        deadzone so near-pure diagonals still register on both axes.</li>
+     *    <li>{@code DUAL_LEAN_LEFT}: left X = lean, right Y = throttle.</li>
+     *    <li>{@code DUAL_THROTTLE_LEFT}: right X = lean, left Y = throttle.</li>
+     *  </ul>
+     *  In dual modes each stick is treated as 1D — its other axis is ignored
+     *  entirely (including for the deadzone check), so drift on the unused
+     *  axis can't leak into physics. Right-stick axes are resolved per device
+     *  via {@link #resolveRightStickAxes} (auto-picks {@code AXIS_Z}/{@code AXIS_RZ}
+     *  or {@code AXIS_RX}/{@code AXIS_RY} based on which pair the pad reports
+     *  as bipolar), so both common pad conventions work without calibration.
+     *
+     *  <p>{@link Settings#getStickMode mode} selects analog vs. digital
+     *  (digital snaps each component past the deadzone to ±1/0), and
+     *  {@link Settings#getStickDeadzonePct deadzone} is shared by all sticks
+     *  in all layouts.
+     *
+     *  <p>Two transforms compose with the layout, applied per *source stick*
+     *  (not per physics axis):
+     *  <ul>
+     *    <li>{@link Settings#getStickAxisFlip axis flip} swaps X↔Y on the
+     *        affected stick(s) — picks which physical axis feeds the
+     *        physics quantity the layout assigned to that stick. Applied
+     *        before deadzone+scale.</li>
+     *    <li>{@link Settings#getStickInvert invert} flips the sign of the
+     *        post-scale output for the affected stick(s). Applied after
+     *        deadzone+scale.</li>
+     *  </ul>
+     *  In SINGLE mode the right-stick toggles are no-ops (no R stick in use). */
     private boolean dispatchAnalogStick(MotionEvent event) {
         if (gd.gameView == null) return false;
 
-        float ax = event.getAxisValue(MotionEvent.AXIS_X);
-        float ay = event.getAxisValue(MotionEvent.AXIS_Y);
-
-        // Live reads from Settings so the user can switch mode / deadzone
-        // in the options menu and feel the change immediately on the next
-        // motion event. Cheap — two int pref reads.
+        // Live reads from Settings so the user can switch mode / deadzone /
+        // layout / invert / flip in the options menu and feel the change
+        // immediately on the next motion event. Cheap — five int pref reads.
         final float deadzone = Settings.getStickDeadzonePct() / 100f;
         final boolean digital = Settings.getStickMode() == Settings.STICK_MODE_DIGITAL;
+        final int layout = Settings.getStickLayout();
+        final int invert = Settings.getStickInvert();
+        final int axisFlip = Settings.getStickAxisFlip();
 
-        // Per-mode: figure out whether the stick is "active" and what
-        // (x, y) to ship to physics.
-        boolean inside;
-        float x, y;
-        if (digital) {
-            // Per-axis deadzone — that's how a real d-pad behaves. Chord
-            // magnitude would conflate the two axes after snapping and
-            // make diagonals feel inconsistent.
-            x = ax > deadzone ?  1f : (ax < -deadzone ? -1f : 0f);
-            y = ay > deadzone ?  1f : (ay < -deadzone ? -1f : 0f);
-            inside = (x == 0f && y == 0f);
-        } else {
-            // Analog: chord magnitude so a near-pure diagonal still
-            // registers above the deadzone on both axes.
-            float mag = (float) Math.sqrt(ax * ax + ay * ay);
-            inside = mag < deadzone;
-            if (inside) {
-                x = 0f;
-                y = 0f;
+        // Axis flip is applied *before* deadzone+scale: it just selects
+        // which raw physical axis on a stick feeds the assigned physics
+        // quantity. Invert is applied *after* deadzone+scale: it flips the
+        // sign of the post-scale output. Both compose with the layout.
+        final boolean flipL = (axisFlip == Settings.STICK_AXIS_FLIP_LEFT)
+                || (axisFlip == Settings.STICK_AXIS_FLIP_BOTH);
+        final boolean flipR = (axisFlip == Settings.STICK_AXIS_FLIP_RIGHT)
+                || (axisFlip == Settings.STICK_AXIS_FLIP_BOTH);
+        final boolean invertL = (invert == Settings.STICK_INVERT_LEFT)
+                || (invert == Settings.STICK_INVERT_ALL);
+        final boolean invertR = (invert == Settings.STICK_INVERT_RIGHT)
+                || (invert == Settings.STICK_INVERT_ALL);
+
+        float leanComponent;
+        float throttleComponent;
+        if (layout == Settings.STICK_LAYOUT_SINGLE) {
+            float ax = event.getAxisValue(MotionEvent.AXIS_X);
+            float ay = event.getAxisValue(MotionEvent.AXIS_Y);
+            if (digital) {
+                // Per-axis deadzone — that's how a real d-pad behaves. Chord
+                // magnitude would conflate the two axes after snapping and
+                // make diagonals feel inconsistent.
+                leanComponent     = ax > deadzone ?  1f : (ax < -deadzone ? -1f : 0f);
+                throttleComponent = ay > deadzone ?  1f : (ay < -deadzone ? -1f : 0f);
             } else {
-                // Rescale (mag - deadzone) → 0..1, preserve direction,
-                // clamp components to ±1.
-                float scale = (mag - deadzone) / (1f - deadzone) / mag;
-                x = ax * scale;
-                y = ay * scale;
-                if (x >  1f) x =  1f; else if (x < -1f) x = -1f;
-                if (y >  1f) y =  1f; else if (y < -1f) y = -1f;
+                // Analog: chord magnitude so a near-pure diagonal still
+                // registers above the deadzone on both axes.
+                float mag = (float) Math.sqrt(ax * ax + ay * ay);
+                if (mag < deadzone) {
+                    leanComponent = 0f;
+                    throttleComponent = 0f;
+                } else {
+                    // Rescale (mag - deadzone) → 0..1, preserve direction,
+                    // clamp components to ±1.
+                    float scale = (mag - deadzone) / (1f - deadzone) / mag;
+                    leanComponent     = ax * scale;
+                    throttleComponent = ay * scale;
+                    if (leanComponent >  1f) leanComponent =  1f;
+                    else if (leanComponent < -1f) leanComponent = -1f;
+                    if (throttleComponent >  1f) throttleComponent =  1f;
+                    else if (throttleComponent < -1f) throttleComponent = -1f;
+                }
+            }
+            // Single-stick axis flip: swap which axis drives lean vs throttle.
+            // Default: stick X = lean, stick Y = throttle.
+            // Flipped: stick Y = lean, stick X = throttle.
+            // R is unused in single mode → flipR is a no-op here.
+            if (flipL) {
+                float t = leanComponent;
+                leanComponent = throttleComponent;
+                throttleComponent = t;
+            }
+            // Single-stick invert: L is the only stick → invertL flips both
+            // outputs. R is unused → invertR is a no-op.
+            if (invertL) {
+                leanComponent = -leanComponent;
+                throttleComponent = -throttleComponent;
+            }
+        } else {
+            // Right stick axes vary by pad — auto-resolve per device so
+            // both common conventions work without user calibration.
+            int[] rightAxes = resolveRightStickAxes(event.getDevice());
+            float lx = event.getAxisValue(MotionEvent.AXIS_X);
+            float ly = event.getAxisValue(MotionEvent.AXIS_Y);
+            float rx = event.getAxisValue(rightAxes[0]);
+            float ry = event.getAxisValue(rightAxes[1]);
+            // Layout decides which stick drives which physics axis; flip
+            // decides which physical axis on that stick to read. Default
+            // physical axis is X for lean (the lateral motion), Y for
+            // throttle (the vertical motion); flipping picks the opposite.
+            float leanRaw, throttleRaw;
+            if (layout == Settings.STICK_LAYOUT_DUAL_LEAN_LEFT) {
+                // L → lean, R → throttle.
+                leanRaw     = flipL ? ly : lx;
+                throttleRaw = flipR ? rx : ry;
+            } else { // STICK_LAYOUT_DUAL_THROTTLE_LEFT — L → throttle, R → lean.
+                throttleRaw = flipL ? lx : ly;
+                leanRaw     = flipR ? ry : rx;
+            }
+            leanComponent     = mapAxis1D(leanRaw, deadzone, digital);
+            throttleComponent = mapAxis1D(throttleRaw, deadzone, digital);
+            // Invert is per source stick, not per physics axis: invertL
+            // flips whatever physics quantity L is currently driving,
+            // invertR flips whatever R drives. Read the layout to decide.
+            if (layout == Settings.STICK_LAYOUT_DUAL_LEAN_LEFT) {
+                if (invertL) leanComponent = -leanComponent;
+                if (invertR) throttleComponent = -throttleComponent;
+            } else { // STICK_LAYOUT_DUAL_THROTTLE_LEFT
+                if (invertL) throttleComponent = -throttleComponent;
+                if (invertR) leanComponent = -leanComponent;
             }
         }
+
+        boolean inside = (leanComponent == 0f && throttleComponent == 0f);
 
         // In menu: never drive the analog channel. If we'd been driving it
         // before the menu opened, push one neutral frame to release.
@@ -295,7 +399,9 @@ public class ControllerInputHandler {
 
         if (inside) {
             if (!analogActive) return false;
-            // Stick just returned to centre — release physics state and stop.
+            // Both sticks just dropped into their deadzones — release
+            // physics state and stop. (In single mode "both" is "the only
+            // stick"; in dual mode we wait until both are inside.)
             gd.gameView.setAnalogInput(0, 0);
             analogActive = false;
             return true;
@@ -304,12 +410,73 @@ public class ControllerInputHandler {
         // Sign convention: physics expects positive throttle = accel and
         // positive lean = forward (right). Android stick Y is +down, so
         // throttle = -y. Stick X is +right, so lean = +x.
-        int throttleSignedI = (int) (-y * 0x10000);
-        int leanSignedI     = (int) ( x * 0x10000);
+        int throttleSignedI = (int) (-throttleComponent * 0x10000);
+        int leanSignedI     = (int) ( leanComponent * 0x10000);
 
         gd.gameView.setAnalogInput(throttleSignedI, leanSignedI);
         analogActive = true;
         return true;
+    }
+
+    /** Resolve which Android axes carry the right stick on {@code device}.
+     *  Most pads use {@link MotionEvent#AXIS_Z} / {@link MotionEvent#AXIS_RZ},
+     *  some use {@link MotionEvent#AXIS_RX} / {@link MotionEvent#AXIS_RY},
+     *  and a few put unipolar trigger pressure on Z/RZ — so we pick the pair
+     *  the device declares as bipolar (range crosses zero with non-trivial
+     *  extent). Result is cached per {@link InputDevice#getId()} on first
+     *  call. Defaults to Z/RZ if the device is null or exposes neither pair
+     *  as a stick. */
+    private int[] resolveRightStickAxes(InputDevice device) {
+        if (device == null) {
+            return new int[]{MotionEvent.AXIS_Z, MotionEvent.AXIS_RZ};
+        }
+        Integer key = device.getId();
+        int[] cached = rightStickAxesByDevice.get(key);
+        if (cached != null) return cached;
+
+        int[] result;
+        boolean zPair = isBipolarStickAxis(device, MotionEvent.AXIS_Z)
+                && isBipolarStickAxis(device, MotionEvent.AXIS_RZ);
+        boolean rPair = isBipolarStickAxis(device, MotionEvent.AXIS_RX)
+                && isBipolarStickAxis(device, MotionEvent.AXIS_RY);
+        if (zPair) {
+            // Prefer Z/RZ when both are valid — it's the more common
+            // convention and a pad that exposes both pairs likely treats
+            // RX/RY as something else.
+            result = new int[]{MotionEvent.AXIS_Z, MotionEvent.AXIS_RZ};
+        } else if (rPair) {
+            result = new int[]{MotionEvent.AXIS_RX, MotionEvent.AXIS_RY};
+        } else {
+            // Pad doesn't expose a clean right-stick pair (single-stick
+            // controller, or weird wiring). Fall back to the default — the
+            // dispatch will read 0s on those axes, which is "centered" and
+            // therefore inert.
+            result = new int[]{MotionEvent.AXIS_Z, MotionEvent.AXIS_RZ};
+        }
+        rightStickAxesByDevice.put(key, result);
+        return result;
+    }
+
+    /** True if {@code device} declares {@code axis} as a bipolar stick axis
+     *  (range crosses zero, half-extent on each side). Filters out
+     *  unipolar trigger axes that some pads put on Z/RZ. */
+    private static boolean isBipolarStickAxis(InputDevice device, int axis) {
+        InputDevice.MotionRange range = device.getMotionRange(axis, InputDevice.SOURCE_JOYSTICK);
+        if (range == null) return false;
+        return range.getMin() < -0.5f && range.getMax() > 0.5f;
+    }
+
+    /** Single-axis deadzone + scaling for dual-stick layouts. The stick's
+     *  other axis is ignored entirely — drift on it never reaches physics. */
+    private static float mapAxis1D(float v, float deadzone, boolean digital) {
+        if (digital) {
+            return v > deadzone ? 1f : (v < -deadzone ? -1f : 0f);
+        }
+        float abs = v >= 0 ? v : -v;
+        if (abs < deadzone) return 0f;
+        float scaled = (abs - deadzone) / (1f - deadzone);
+        if (scaled > 1f) scaled = 1f;
+        return v >= 0 ? scaled : -scaled;
     }
 
     /**

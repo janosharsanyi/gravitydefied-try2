@@ -142,6 +142,52 @@ public class Settings {
 	private static final String STICK_MODE = "stick_mode";
 	private static final int STICK_MODE_DEFAULT = STICK_MODE_ANALOG;
 
+	// Stick layout: which physical sticks drive which physics axes.
+	// SINGLE — left stick does both throttle (Y) and lean (X); right
+	//   stick is unused. Original behavior, default.
+	// DUAL_LEAN_LEFT — left stick X = lean, right stick Y = throttle.
+	//   Most racing games put steering on the left thumb.
+	// DUAL_THROTTLE_LEFT — left stick Y = throttle, right stick X = lean.
+	//   Some prefer throttle/brake on the dominant thumb.
+	// In dual modes each stick is treated as 1D (its other axis is
+	// ignored entirely, including for deadzone) so drift on the unused
+	// axis can never leak into physics. Order matches
+	// R.array.stick_layout_options.
+	public static final int STICK_LAYOUT_SINGLE = 0;
+	public static final int STICK_LAYOUT_DUAL_LEAN_LEFT = 1;
+	public static final int STICK_LAYOUT_DUAL_THROTTLE_LEFT = 2;
+	private static final String STICK_LAYOUT = "stick_layout";
+	private static final int STICK_LAYOUT_DEFAULT = STICK_LAYOUT_SINGLE;
+
+	// Stick invert: flip the SIGN of the affected stick's outputs.
+	// Applied per source stick — composes with whatever physics axis the
+	// stick is mapped to by the layout. e.g. in DUAL_LEAN_LEFT (L=lean,
+	// R=throttle), "Invert R" flips throttle. In DUAL_THROTTLE_LEFT
+	// (L=throttle, R=lean), "Invert R" flips lean. In SINGLE the left
+	// stick is the only one, so LEFT and ALL behave identically and RIGHT
+	// is a no-op. Order matches R.array.stick_lr_options.
+	public static final int STICK_INVERT_NONE = 0;
+	public static final int STICK_INVERT_LEFT = 1;
+	public static final int STICK_INVERT_RIGHT = 2;
+	public static final int STICK_INVERT_ALL = 3;
+	private static final String STICK_INVERT = "stick_invert";
+	private static final int STICK_INVERT_DEFAULT = STICK_INVERT_NONE;
+
+	// Stick axis flip: swap WHICH PHYSICAL AXIS on each stick drives the
+	// assigned physics quantity. In SINGLE the left stick's X/Y are
+	// swapped (so stick Y becomes lean and stick X becomes throttle). In
+	// dual modes each flipped stick switches between its two axes for the
+	// physics quantity the layout assigns to it (the layout still decides
+	// which stick drives lean vs throttle; flip only decides X vs Y on
+	// that stick). RIGHT is a no-op in SINGLE. Order matches
+	// R.array.stick_lr_options.
+	public static final int STICK_AXIS_FLIP_NONE = 0;
+	public static final int STICK_AXIS_FLIP_LEFT = 1;
+	public static final int STICK_AXIS_FLIP_RIGHT = 2;
+	public static final int STICK_AXIS_FLIP_BOTH = 3;
+	private static final String STICK_AXIS_FLIP = "stick_axis_flip";
+	private static final int STICK_AXIS_FLIP_DEFAULT = STICK_AXIS_FLIP_NONE;
+
 	// Hide the status bar while the activity is in the foreground. The nav
 	// bar stays visible (separate concern; deferred). With
 	// BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE the user can swipe from the
@@ -196,6 +242,9 @@ public class Settings {
 		setControllerAutoHideTimeoutSec(CONTROLLER_AUTOHIDE_TIMEOUT_SEC_DEFAULT);
 		setStickDeadzonePct(STICK_DEADZONE_PCT_DEFAULT);
 		setStickMode(STICK_MODE_DEFAULT);
+		setStickLayout(STICK_LAYOUT_DEFAULT);
+		setStickInvert(STICK_INVERT_DEFAULT);
+		setStickAxisFlip(STICK_AXIS_FLIP_DEFAULT);
 		setImmersiveModeEnabled(IMMERSIVE_MODE_ENABLED_DEFAULT);
 		setDarkModeEnabled(DARK_MODE_ENABLED_DEFAULT);
 		setInputOption(INPUT_OPTION_DEFAULT);
@@ -359,6 +408,30 @@ public class Settings {
 
 	public static void setStickMode(int mode) {
 		setInt(STICK_MODE, mode);
+	}
+
+	public static int getStickLayout() {
+		return preferences.getInt(STICK_LAYOUT, STICK_LAYOUT_DEFAULT);
+	}
+
+	public static void setStickLayout(int layout) {
+		setInt(STICK_LAYOUT, layout);
+	}
+
+	public static int getStickInvert() {
+		return preferences.getInt(STICK_INVERT, STICK_INVERT_DEFAULT);
+	}
+
+	public static void setStickInvert(int invert) {
+		setInt(STICK_INVERT, invert);
+	}
+
+	public static int getStickAxisFlip() {
+		return preferences.getInt(STICK_AXIS_FLIP, STICK_AXIS_FLIP_DEFAULT);
+	}
+
+	public static void setStickAxisFlip(int flip) {
+		setInt(STICK_AXIS_FLIP, flip);
 	}
 
 	public static boolean isImmersiveModeEnabled() {

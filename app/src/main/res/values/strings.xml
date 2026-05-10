@@ -56,6 +56,9 @@
 	<string name="controller_autohide">Auto-hide keypad after</string>
 	<string name="stick_mode">Stick mode</string>
 	<string name="stick_deadzone">Stick deadzone</string>
+	<string name="stick_layout">Stick layout</string>
+	<string name="stick_invert">Stick invert</string>
+	<string name="stick_axis_flip">Stick X/Y swap</string>
 	<string name="immersive_mode">Immersive mode</string>
 	<string name="dark_mode">Dark mode</string>
 	<string name="clear_highscore">Clear highscore</string>
@@ -243,6 +246,23 @@
 		<item>Default</item>
 		<item>Forgiving</item>
 		<item>Very forgiving</item>
+	</string-array>
+
+	<!-- Order must match Settings.STICK_LAYOUT_SINGLE / DUAL_LEAN_LEFT / DUAL_THROTTLE_LEFT. -->
+	<string-array name="stick_layout_options">
+		<item>Single (L)</item>
+		<item>Dual: lean L / gas R</item>
+		<item>Dual: gas L / lean R</item>
+	</string-array>
+
+	<!-- Shared by Stick invert (NONE/LEFT/RIGHT/ALL) and Stick X/Y swap
+	     (NONE/LEFT/RIGHT/BOTH). Both options have identical 4-state
+	     semantics: no stick / left only / right only / both sticks. -->
+	<string-array name="stick_lr_options">
+		<item>None</item>
+		<item>Left</item>
+		<item>Right</item>
+		<item>Both</item>
 	</string-array>
 
 	<string-array name="leagues">
