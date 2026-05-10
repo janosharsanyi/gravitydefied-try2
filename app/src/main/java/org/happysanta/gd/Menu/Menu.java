@@ -83,6 +83,8 @@ public class Menu
 	private OptionsMenuElement keyboardInMenuOptionItem;
 	private OptionsMenuElement keypadLandscapeSideOptionItem;
 	private OptionsMenuElement controllerAutohideOptionItem;
+	private OptionsMenuElement stickModeOptionItem;
+	private OptionsMenuElement stickDeadzoneOptionItem;
 	private OptionsMenuElement immersiveModeOptionItem;
 	private OptionsMenuElement darkModeOptionItem;
 	private OptionsMenuElement vibrateOnTouchOptionItem;
@@ -144,6 +146,8 @@ public class Menu
 	private String[] keysetStrings = null;
 	private String[] keypadSideStrings = null;
 	private String[] controllerAutohideStrings = null;
+	private String[] stickModeStrings = null;
+	private String[] stickDeadzoneStrings = null;
 	private String[] shadowModeStrings = null;
 	private String[] trackColorStrings = null;
 	// private EmptyLineMenuElement emptyLine;
@@ -186,6 +190,8 @@ public class Menu
 				keysetStrings = getStringArray(R.array.keyset);
 				keypadSideStrings = getStringArray(R.array.keypad_side_options);
 				controllerAutohideStrings = getStringArray(R.array.controller_autohide_options);
+				stickModeStrings = getStringArray(R.array.stick_mode_options);
+				stickDeadzoneStrings = getStringArray(R.array.stick_deadzone_options);
 				shadowModeStrings = getStringArray(R.array.shadow_mode_options);
 				trackColorStrings = getStringArray(R.array.track_color_options);
 				difficultyLevels = getStringArray(R.array.difficulty);
@@ -404,6 +410,8 @@ public class Menu
 				keyboardInMenuOptionItem = new OptionsMenuElement(getString(R.string.keyboard_in_menu), Settings.isKeyboardInMenuEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				keypadLandscapeSideOptionItem = new OptionsMenuElement(getString(R.string.keypad_landscape_side), Settings.getKeypadLandscapeSide(), this, keypadSideStrings, false, optionsMenu);
 				controllerAutohideOptionItem = new OptionsMenuElement(getString(R.string.controller_autohide), controllerAutohideIndexFromSeconds(Settings.getControllerAutoHideTimeoutSec()), this, controllerAutohideStrings, false, optionsMenu);
+				stickModeOptionItem = new OptionsMenuElement(getString(R.string.stick_mode), Settings.getStickMode(), this, stickModeStrings, false, optionsMenu);
+				stickDeadzoneOptionItem = new OptionsMenuElement(getString(R.string.stick_deadzone), stickDeadzoneIndexFromPct(Settings.getStickDeadzonePct()), this, stickDeadzoneStrings, false, optionsMenu);
 				immersiveModeOptionItem = new OptionsMenuElement(getString(R.string.immersive_mode), Settings.isImmersiveModeEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				darkModeOptionItem = new OptionsMenuElement(getString(R.string.dark_mode), Settings.isDarkModeEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				clearHighscoreOptionItem = new SimpleMenuElementNew(getString(R.string.clear_highscore), eraseScreen, this);
@@ -421,6 +429,8 @@ public class Menu
 				optionsMenu.addItem(keyboardInMenuOptionItem);
 				optionsMenu.addItem(keypadLandscapeSideOptionItem);
 				optionsMenu.addItem(controllerAutohideOptionItem);
+				optionsMenu.addItem(stickModeOptionItem);
+				optionsMenu.addItem(stickDeadzoneOptionItem);
 				optionsMenu.addItem(immersiveModeOptionItem);
 				optionsMenu.addItem(darkModeOptionItem);
 				optionsMenu.addItem(clearHighscoreOptionItem);
@@ -1236,6 +1246,30 @@ public class Menu
 			gd.refreshKeypadIdleTimer();
 			return;
 		}
+		if (item == stickModeOptionItem) {
+			// Click cycles through Analog / Digital. Same advance pattern
+			// as the other multi-state options; the controller re-reads
+			// Settings on every motion event so no notify is needed.
+			if (stickModeOptionItem._charvZ()) {
+				stickModeOptionItem.setSelectedOption(
+						stickModeOptionItem.getSelectedOption() + 1);
+			}
+			Settings.setStickMode(stickModeOptionItem.getSelectedOption());
+			return;
+		}
+		if (item == stickDeadzoneOptionItem) {
+			// Click cycles through the 4 deadzone presets. Same advance
+			// pattern as controllerAutohideOptionItem; the controller
+			// re-reads Settings on every motion event so no notify is
+			// needed.
+			if (stickDeadzoneOptionItem._charvZ()) {
+				stickDeadzoneOptionItem.setSelectedOption(
+						stickDeadzoneOptionItem.getSelectedOption() + 1);
+			}
+			Settings.setStickDeadzonePct(
+					stickDeadzonePctFromIndex(stickDeadzoneOptionItem.getSelectedOption()));
+			return;
+		}
 		if (item == keypadLandscapeSideOptionItem) {
 			// _charvZ() returns true when the user fired (clicked/tapped)
 			// the item rather than nudging it with left/right. For this
@@ -1614,6 +1648,28 @@ public class Menu
 	private static int controllerAutohideSecondsFromIndex(int index) {
 		int[] vals = Settings.CONTROLLER_AUTOHIDE_TIMEOUT_VALUES;
 		if (index < 0 || index >= vals.length) return vals[0];
+		return vals[index];
+	}
+
+	/**
+	 * Map a saved deadzone-percent value back to its index in
+	 * {@link Settings#STICK_DEADZONE_PCT_VALUES}. Falls through to the
+	 * Default index for unknown values.
+	 */
+	private static int stickDeadzoneIndexFromPct(int pct) {
+		int[] vals = Settings.STICK_DEADZONE_PCT_VALUES;
+		for (int i = 0; i < vals.length; i++) {
+			if (vals[i] == pct) return i;
+		}
+		// 1 == Default in the values array; preserves existing feel if a
+		// future / corrupted preference value would otherwise crash.
+		return 1;
+	}
+
+	/** Inverse of {@link #stickDeadzoneIndexFromPct(int)}. */
+	private static int stickDeadzonePctFromIndex(int index) {
+		int[] vals = Settings.STICK_DEADZONE_PCT_VALUES;
+		if (index < 0 || index >= vals.length) return vals[1];
 		return vals[index];
 	}
 

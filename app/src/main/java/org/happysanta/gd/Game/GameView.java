@@ -184,6 +184,13 @@ public class GameView extends View {
 	private int inputOption;
 	private boolean[] m_aeaZ;
 	private boolean[] m_LaZ;
+	// Cached signed-magnitude analog stick values (.16 fixed-point), updated
+	// on each motion event from the gamepad in {@link #setAnalogInput} and
+	// merged with the digital key sums in {@link #applyMergedInput} so the
+	// two input paths can coexist per-axis (e.g. button-held gas overrides
+	// the stick's throttle component while the stick keeps driving lean).
+	private int analogThrottleSignedI = 0;
+	private int analogLeanSignedI = 0;
 	// private int defaultHeight;
 	// private int defaultWidth;
 
@@ -988,7 +995,7 @@ public class GameView extends View {
 					byte0 = -1;
 					byte1 = -1;
 				}
-				physEngine._aIIV(byte0, byte1);
+				applyMergedInput(byte0, byte1);
 			}
 		}
 	}
@@ -1040,7 +1047,7 @@ public class GameView extends View {
 				k += m_DaaB[j1][1];
 			}
 
-		physEngine._aIIV(j, k);
+		applyMergedInput(j, k);
 	}
 
 	protected void processKeyPressed(int j) {
@@ -1094,6 +1101,58 @@ public class GameView extends View {
 
 	public synchronized void keyReleased(int j) {
 		processKeyReleased(j);
+	}
+
+	/**
+	 * Analog input bridge — pushes signed throttle / lean magnitudes from a
+	 * gamepad stick straight into the physics engine, bypassing the
+	 * digital-numpad-key path that keyboard / on-screen keypad / D-pad use.
+	 *
+	 * <p>Both args are signed fixed-point .16 in {@code [-0x10000, +0x10000]}
+	 * (i.e. {@code 0x10000 = 1.0}). Sign convention matches
+	 * {@link Physics#_aIIV}: positive throttle = accelerate, negative =
+	 * brake; positive lean = forward, negative = back. Pass {@code (0, 0)}
+	 * when the stick returns to its deadzone to release physics state.
+	 */
+	public synchronized void setAnalogInput(int throttleSignedI, int leanSignedI) {
+		analogThrottleSignedI = throttleSignedI;
+		analogLeanSignedI = leanSignedI;
+		if (physEngine == null) return;
+		// Re-fire the merged path so any currently-held digital key still
+		// dominates its axis (per-axis priority — see {@link #applyMergedInput}).
+		// _xavV recomputes the digital sum from m_LaZ/m_aeaZ each call, which
+		// is cheap and lets us keep all merge logic in one place.
+		_xavV();
+	}
+
+	/**
+	 * Merge digital key state with the cached analog stick deflection and
+	 * push a single combined input to physics. Called from every digital
+	 * input site (key event sums via {@link #_xavV}, on-screen virtual d-pad
+	 * via {@link #_ifIIV}) and from {@link #setAnalogInput} on stick events.
+	 *
+	 * <p>Per-axis priority: a non-zero digital sign on an axis pins that
+	 * axis to full magnitude (matches the original {@link Physics#_aIIV}
+	 * "buttons mean full pull" semantics), while the other axis falls
+	 * through to the stick's signed magnitude. With no digital input on
+	 * either axis this is a pure stick frame; with no stick deflection
+	 * it's a pure digital frame; either way we go through
+	 * {@link Physics#_aIIVAnalog} so the unaffected axis preserves its
+	 * proportional value when the user is mixing inputs (e.g. holding
+	 * gas on the gamepad while leaning the stick).
+	 *
+	 * @param digitalThrottleSign {@code > 0} = accel held, {@code < 0} = brake held, 0 = none
+	 * @param digitalLeanSign     {@code > 0} = lean forward held, {@code < 0} = back, 0 = none
+	 */
+	private void applyMergedInput(int digitalThrottleSign, int digitalLeanSign) {
+		if (physEngine == null) return;
+		int throttleOut = digitalThrottleSign != 0
+				? (digitalThrottleSign > 0 ? 0x10000 : -0x10000)
+				: analogThrottleSignedI;
+		int leanOut = digitalLeanSign != 0
+				? (digitalLeanSign > 0 ? 0x10000 : -0x10000)
+				: analogLeanSignedI;
+		physEngine._aIIVAnalog(throttleOut, leanOut);
 	}
 
 	@Override

@@ -69,8 +69,16 @@ public class ControllerInputHandler {
     private static final int MENU_KEY_RIGHT = 6;
     private static final int MENU_KEY_FIRE  = 5;
 
-    // Analog stick threshold for treating the stick as a digital direction.
-    private static final float STICK_DEADZONE = 0.5f;
+    // Threshold for treating the d-pad-as-HAT axis as a digital direction.
+    private static final float HAT_DEADZONE = 0.5f;
+
+    // Deadzone applied to the analog stick (AXIS_X / AXIS_Y) before it
+    // drives the physics engine — read live from Settings each motion
+    // event so the user can re-pick it from the options menu without
+    // restarting. Smaller than {@link #HAT_DEADZONE} because the stick
+    // is meant to be proportional, not switch-like; this is the
+    // threshold below which we consider the stick "centered" and stop
+    // sending analog updates. See Settings.STICK_DEADZONE_PCT_VALUES.
 
     private final GDActivity gd;
 
@@ -80,15 +88,23 @@ public class ControllerInputHandler {
      *  release always sends the same J2ME key the press did. */
     private final HashMap<Integer, Integer> heldByButton = new HashMap<>();
 
-    /** J2ME key currently held for the X axis (left stick + d-pad-as-hat),
-     *  or 0 if neutral. Same role as {@link #heldByButton} for the digital
-     *  buttons. */
-    private int heldByStickX = 0;
-    private int heldByStickY = 0;
+    /** J2ME key currently held for the d-pad-as-HAT X axis, or 0 if
+     *  neutral. Same role as {@link #heldByButton} for the digital
+     *  buttons — the analog stick uses the {@link #setAnalogInput}
+     *  channel instead and doesn't go through this. */
+    private int heldByHatX = 0;
+    private int heldByHatY = 0;
 
-    // Last quantised (-1/0/+1) axis value, used for edge detection.
-    private int lastStickX = 0;
-    private int lastStickY = 0;
+    // Last quantised (-1/0/+1) HAT axis value, used for edge detection.
+    private int lastHatX = 0;
+    private int lastHatY = 0;
+
+    /** True while the analog stick is outside the deadzone — i.e. while
+     *  the controller is currently driving physics through the analog
+     *  channel. Used to push one final "neutral" frame when the stick
+     *  returns to centre, then stop spamming the engine with zeros that
+     *  would otherwise stomp any concurrent keyboard input. */
+    private boolean analogActive = false;
 
     public ControllerInputHandler(GDActivity gd) {
         this.gd = gd;
@@ -155,60 +171,145 @@ public class ControllerInputHandler {
 
     /**
      * Feed a generic motion event from {@code Activity.dispatchGenericMotionEvent}.
-     * Quantises the left stick + d-pad-as-hat axes into directional press/release
-     * events.
+     *
+     * <p>Two axis sources, two paths:
+     * <ul>
+     *   <li><b>HAT</b> (d-pad-as-axis on pads that don't fire {@code KEYCODE_DPAD_*}):
+     *       quantised to ±1/0 with a 0.5 deadzone and sent as J2ME numpad key
+     *       press/release through {@link #sendKey}. Identical to the digital
+     *       d-pad button path.</li>
+     *   <li><b>Left stick</b> (AXIS_X / AXIS_Y): goes through the analog
+     *       channel — deadzone-clipped and pushed to {@link Physics#_aIIVAnalog}
+     *       via {@link org.happysanta.gd.Game.GameView#setAnalogInput} so
+     *       half-tilt produces visibly less torque/throttle than full-tilt.
+     *       Suppressed in the menu (menu nav stays digital).</li>
+     * </ul>
      */
     public boolean dispatchMotion(MotionEvent event) {
         if (!fromGamepad(event.getSource())) return false;
         if (event.getAction() != MotionEvent.ACTION_MOVE) return false;
 
-        // D-pads on some pads come through as HAT axes rather than KEYCODE_DPAD_*.
-        // Read both and use whichever has the larger magnitude — ensures we
-        // don't lose stick input just because the d-pad is centred (or vice versa).
-        float ax = event.getAxisValue(MotionEvent.AXIS_X);
-        float ay = event.getAxisValue(MotionEvent.AXIS_Y);
+        boolean changed = false;
+        changed |= dispatchHat(event);
+        changed |= dispatchAnalogStick(event);
+        return changed;
+    }
+
+    /** HAT (d-pad-as-axis) → digital, quantised to ±1/0 and sent as J2ME keys. */
+    private boolean dispatchHat(MotionEvent event) {
         float hx = event.getAxisValue(MotionEvent.AXIS_HAT_X);
         float hy = event.getAxisValue(MotionEvent.AXIS_HAT_Y);
-        float x = Math.abs(hx) > Math.abs(ax) ? hx : ax;
-        float y = Math.abs(hy) > Math.abs(ay) ? hy : ay;
 
-        int sx = x < -STICK_DEADZONE ? -1 : (x > STICK_DEADZONE ? 1 : 0);
-        int sy = y < -STICK_DEADZONE ? -1 : (y > STICK_DEADZONE ? 1 : 0);
+        int sx = hx < -HAT_DEADZONE ? -1 : (hx > HAT_DEADZONE ? 1 : 0);
+        int sy = hy < -HAT_DEADZONE ? -1 : (hy > HAT_DEADZONE ? 1 : 0);
 
         boolean changed = false;
-        if (sx != lastStickX) {
-            // Release the previously-held X key (whichever it was), then press
-            // the new one.
-            if (heldByStickX != 0) {
-                sendKey(heldByStickX, false);
-                heldByStickX = 0;
+        if (sx != lastHatX) {
+            if (heldByHatX != 0) {
+                sendKey(heldByHatX, false);
+                heldByHatX = 0;
             }
             if (sx < 0) {
-                heldByStickX = leftKey();
-                sendKey(heldByStickX, true);
+                heldByHatX = leftKey();
+                sendKey(heldByHatX, true);
             } else if (sx > 0) {
-                heldByStickX = rightKey();
-                sendKey(heldByStickX, true);
+                heldByHatX = rightKey();
+                sendKey(heldByHatX, true);
             }
-            lastStickX = sx;
+            lastHatX = sx;
             changed = true;
         }
-        if (sy != lastStickY) {
-            if (heldByStickY != 0) {
-                sendKey(heldByStickY, false);
-                heldByStickY = 0;
+        if (sy != lastHatY) {
+            if (heldByHatY != 0) {
+                sendKey(heldByHatY, false);
+                heldByHatY = 0;
             }
             if (sy < 0) {
-                heldByStickY = accelKey();
-                sendKey(heldByStickY, true);
+                heldByHatY = accelKey();
+                sendKey(heldByHatY, true);
             } else if (sy > 0) {
-                heldByStickY = brakeKey();
-                sendKey(heldByStickY, true);
+                heldByHatY = brakeKey();
+                sendKey(heldByHatY, true);
             }
-            lastStickY = sy;
+            lastHatY = sy;
             changed = true;
         }
         return changed;
+    }
+
+    /** Left stick → analog physics channel. Suppressed in menu.
+     *  Stick mode (Settings.getStickMode) selects between analog
+     *  magnitude-proportional output and digital ±1/0 snap. */
+    private boolean dispatchAnalogStick(MotionEvent event) {
+        if (gd.gameView == null) return false;
+
+        float ax = event.getAxisValue(MotionEvent.AXIS_X);
+        float ay = event.getAxisValue(MotionEvent.AXIS_Y);
+
+        // Live reads from Settings so the user can switch mode / deadzone
+        // in the options menu and feel the change immediately on the next
+        // motion event. Cheap — two int pref reads.
+        final float deadzone = Settings.getStickDeadzonePct() / 100f;
+        final boolean digital = Settings.getStickMode() == Settings.STICK_MODE_DIGITAL;
+
+        // Per-mode: figure out whether the stick is "active" and what
+        // (x, y) to ship to physics.
+        boolean inside;
+        float x, y;
+        if (digital) {
+            // Per-axis deadzone — that's how a real d-pad behaves. Chord
+            // magnitude would conflate the two axes after snapping and
+            // make diagonals feel inconsistent.
+            x = ax > deadzone ?  1f : (ax < -deadzone ? -1f : 0f);
+            y = ay > deadzone ?  1f : (ay < -deadzone ? -1f : 0f);
+            inside = (x == 0f && y == 0f);
+        } else {
+            // Analog: chord magnitude so a near-pure diagonal still
+            // registers above the deadzone on both axes.
+            float mag = (float) Math.sqrt(ax * ax + ay * ay);
+            inside = mag < deadzone;
+            if (inside) {
+                x = 0f;
+                y = 0f;
+            } else {
+                // Rescale (mag - deadzone) → 0..1, preserve direction,
+                // clamp components to ±1.
+                float scale = (mag - deadzone) / (1f - deadzone) / mag;
+                x = ax * scale;
+                y = ay * scale;
+                if (x >  1f) x =  1f; else if (x < -1f) x = -1f;
+                if (y >  1f) y =  1f; else if (y < -1f) y = -1f;
+            }
+        }
+
+        // In menu: never drive the analog channel. If we'd been driving it
+        // before the menu opened, push one neutral frame to release.
+        if (gd.isMenuShown()) {
+            if (analogActive) {
+                gd.gameView.setAnalogInput(0, 0);
+                analogActive = false;
+                return true;
+            }
+            return false;
+        }
+
+        if (inside) {
+            if (!analogActive) return false;
+            // Stick just returned to centre — release physics state and stop.
+            gd.gameView.setAnalogInput(0, 0);
+            analogActive = false;
+            return true;
+        }
+
+        // Sign convention: physics expects positive throttle = accel and
+        // positive lean = forward (right). Android stick Y is +down, so
+        // throttle = -y. Stick X is +right, so lean = +x.
+        int throttleSignedI = (int) (-y * 0x10000);
+        int leanSignedI     = (int) ( x * 0x10000);
+
+        gd.gameView.setAnalogInput(throttleSignedI, leanSignedI);
+        analogActive = true;
+        return true;
     }
 
     /**

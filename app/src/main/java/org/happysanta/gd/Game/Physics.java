@@ -191,6 +191,14 @@ public class Physics {
 	private boolean m_sZ;
 	private boolean m_OZ;
 	private boolean m_rZ;
+	// Analog input magnitudes (fixed-point .16, range [0, 0x10000]).
+	// Default 0x10000 = 1.0 = full pull, which is what every digital input
+	// path ({@link #_aIIV} from keyboard / on-screen keypad / D-pad / touch
+	// virtual D-pad) expects. The analog entry point {@link #_aIIVAnalog}
+	// overwrites these with the stick deflection so the per-tick step in
+	// {@link #_qvV} can scale torque / engine effects proportionally.
+	private int m_throttleMagI = 0x10000;
+	private int m_leanMagI = 0x10000;
 	private boolean m_RZ;
 	private boolean m_doZ;
 	private int m_oI;
@@ -493,6 +501,10 @@ public class Physics {
 	public void _aIIV(int j, int i1) {
 		if (!m_vZ) {
 			m_ifZ = m_sZ = m_rZ = m_OZ = false;
+			// Digital callers always mean "full pull" — reset any analog
+			// magnitude left over from a previous gamepad-stick frame.
+			m_throttleMagI = 0x10000;
+			m_leanMagI = 0x10000;
 			if (j > 0)
 				m_ifZ = true;
 			else if (j < 0)
@@ -503,6 +515,39 @@ public class Physics {
 			}
 			if (i1 < 0)
 				m_OZ = true;
+		}
+	}
+
+	/**
+	 * Analog input entry point — same axis convention as {@link #_aIIV} but
+	 * with magnitude. Both args are signed fixed-point .16 in
+	 * {@code [-0x10000, +0x10000]}, where {@code 0x10000 = 1.0}.
+	 *
+	 * @param throttleSignedI {@code > 0} = accelerate, {@code < 0} = brake
+	 * @param leanSignedI     {@code > 0} = lean forward, {@code < 0} = lean back
+	 */
+	public void _aIIVAnalog(int throttleSignedI, int leanSignedI) {
+		if (m_vZ) return;
+		m_ifZ = m_sZ = m_rZ = m_OZ = false;
+		if (throttleSignedI > 0) {
+			m_ifZ = true;
+			m_throttleMagI = throttleSignedI > 0x10000 ? 0x10000 : throttleSignedI;
+		} else if (throttleSignedI < 0) {
+			m_sZ = true;
+			int mag = -throttleSignedI;
+			m_throttleMagI = mag > 0x10000 ? 0x10000 : mag;
+		} else {
+			m_throttleMagI = 0x10000;
+		}
+		if (leanSignedI > 0) {
+			m_rZ = true;
+			m_leanMagI = leanSignedI > 0x10000 ? 0x10000 : leanSignedI;
+		} else if (leanSignedI < 0) {
+			m_OZ = true;
+			int mag = -leanSignedI;
+			m_leanMagI = mag > 0x10000 ? 0x10000 : mag;
+		} else {
+			m_leanMagI = 0x10000;
 		}
 	}
 
@@ -543,6 +588,19 @@ public class Physics {
 		}
 	}
 
+	/**
+	 * Linear-interpolate a posture rest-length constant between its
+	 * neutral and fully-leaned values by {@code alphaI} (fixed-point .16,
+	 * 0..0x10000), then scale by {@code m_yI} the same way the original
+	 * categorical assignments did. Used by {@link #_qvV} so analog lean
+	 * input produces a partially-leaned body target rather than snapping
+	 * to the extreme preset on any non-zero deflection.
+	 */
+	private int lerpForI(int neutral, int leaned, int alphaI) {
+		long blended = ((long) neutral * (0x10000L - alphaI) + (long) leaned * alphaI) >> 16;
+		return (int) (blended * (long) m_yI >> 16);
+	}
+
 	private void _qvV() {
 		if (!m_IZ) {
 			int j = m_Hak[1].m_ifan[m_vaI].x - m_Hak[2].m_ifan[m_vaI].x;
@@ -551,11 +609,12 @@ public class Physics {
 			j = (int) (((long) j << 32) / (long) j1 >> 16);
 			i1 = (int) (((long) i1 << 32) / (long) j1 >> 16);
 			if (m_dZ && m_cI >= -m_QI)
-				m_cI -= m_charI;
+				m_cI -= (int) ((long) m_charI * (long) m_throttleMagI >> 16);
 			if (m_FZ) {
 				m_cI = 0;
-				m_Hak[1].m_ifan[m_vaI].m_gotoI = (int) ((long) m_Hak[1].m_ifan[m_vaI].m_gotoI * (long) (0x10000 - m_abI) >> 16);
-				m_Hak[2].m_ifan[m_vaI].m_gotoI = (int) ((long) m_Hak[2].m_ifan[m_vaI].m_gotoI * (long) (0x10000 - m_abI) >> 16);
+				int absI = (int) ((long) m_abI * (long) m_throttleMagI >> 16);
+				m_Hak[1].m_ifan[m_vaI].m_gotoI = (int) ((long) m_Hak[1].m_ifan[m_vaI].m_gotoI * (long) (0x10000 - absI) >> 16);
+				m_Hak[2].m_ifan[m_vaI].m_gotoI = (int) ((long) m_Hak[2].m_ifan[m_vaI].m_gotoI * (long) (0x10000 - absI) >> 16);
 				if (m_Hak[1].m_ifan[m_vaI].m_gotoI < 6553)
 					m_Hak[1].m_ifan[m_vaI].m_gotoI = 0;
 				if (m_Hak[2].m_ifan[m_vaI].m_gotoI < 6553)
@@ -568,18 +627,26 @@ public class Physics {
 			m_Hak[1].m_forI = (int) (43690L * (long) m_yI >> 16);
 			m_Hak[2].m_forI = (int) (11915L * (long) m_yI >> 16);
 			m_Hak[5].m_forI = (int) (14563L * (long) m_yI >> 16);
+			// Rider posture targets are picked categorically (neutral /
+			// lean-back / lean-forward) — the verlet constraint solver
+			// then pulls each segment's length toward m_forI, so this is
+			// the *shape the rider relaxes to*, not a rate. With analog
+			// input we lerp between the neutral preset (set just above)
+			// and the directional preset by m_leanMagI, so a 30%-deflected
+			// stick produces a body target that's 30% of the way toward
+			// extreme. Digital input keeps m_leanMagI = 0x10000, so this
+			// resolves to the pure preset — bit-for-bit unchanged.
 			if (m_XZ) {
-				m_Hak[0].m_forI = (int) (18724L * (long) m_yI >> 16);
-				m_Hak[4].m_forI = (int) (14563L * (long) m_yI >> 16);
-				m_Hak[3].m_forI = (int) (18724L * (long) m_yI >> 16);
-				m_Hak[1].m_forI = (int) (43690L * (long) m_yI >> 16);
-				m_Hak[2].m_forI = (int) (10082L * (long) m_yI >> 16);
+				m_Hak[0].m_forI = lerpForI(11915, 18724, m_leanMagI);
+				m_Hak[4].m_forI = lerpForI(18724, 14563, m_leanMagI);
+				// Hak[3], Hak[1] are unchanged by lean-back (constants
+				// match neutral) — left as-is to keep the diff focused.
+				m_Hak[2].m_forI = lerpForI(11915, 10082, m_leanMagI);
 			} else if (m_wZ) {
-				m_Hak[0].m_forI = (int) (18724L * (long) m_yI >> 16);
-				m_Hak[4].m_forI = (int) (18724L * (long) m_yI >> 16);
-				m_Hak[3].m_forI = (int) (14563L * (long) m_yI >> 16);
-				m_Hak[1].m_forI = (int) (26214L * (long) m_yI >> 16);
-				m_Hak[2].m_forI = (int) (11915L * (long) m_yI >> 16);
+				m_Hak[0].m_forI = lerpForI(11915, 18724, m_leanMagI);
+				m_Hak[3].m_forI = lerpForI(18724, 14563, m_leanMagI);
+				m_Hak[1].m_forI = lerpForI(43690, 26214, m_leanMagI);
+				// Hak[4], Hak[2] match neutral for lean-forward.
 			}
 			if (m_XZ || m_wZ) {
 				int k1 = -i1;
@@ -589,14 +656,27 @@ public class Physics {
 					if (m_kI < 0)
 						i2 = (int) (((long) (m_longI - (m_kI >= 0 ? m_kI : -m_kI)) << 32) / (long) m_longI >> 16);
 					int k2 = (int) ((long) m_AI * (long) i2 >> 16);
+					k2 = (int) ((long) k2 * (long) m_leanMagI >> 16);
 					int i3 = (int) ((long) k1 * (long) k2 >> 16);
 					int k3 = (int) ((long) l1 * (long) k2 >> 16);
 					int i4 = (int) ((long) j * (long) k2 >> 16);
 					int k4 = (int) ((long) i1 * (long) k2 >> 16);
-					if (m_TI > 32768)
-						m_TI = m_TI - 1638 >= 0 ? m_TI - 1638 : 0;
-					else
-						m_TI = m_TI - 3276 >= 0 ? m_TI - 3276 : 0;
+					// m_TI is the rider's visual posture accumulator (0 = full
+					// back, 32768 = neutral, 0x10000 = full forward) used by
+					// the draw path to lerp between posture meshes. Originally
+					// stepped unconditionally toward the extreme (0 here) per
+					// frame, which is why even light analog input snapped the
+					// rider to a full lean. Clamp to a target derived from
+					// m_leanMagI so partial input parks the posture partway —
+					// digital input keeps m_leanMagI = 0x10000 → target = 0,
+					// reproducing the original behaviour bit-for-bit.
+					int targetTI_back = 32768 - (int) ((32768L * (long) m_leanMagI) >> 16);
+					int step_back = m_TI > 32768 ? 1638 : 3276;
+					if (m_TI > targetTI_back) {
+						m_TI = m_TI - step_back <= targetTI_back ? targetTI_back : m_TI - step_back;
+					} else if (m_TI < targetTI_back) {
+						m_TI = m_TI + step_back >= targetTI_back ? targetTI_back : m_TI + step_back;
+					}
 					m_Hak[4].m_ifan[m_vaI].m_eI -= i3;
 					m_Hak[4].m_ifan[m_vaI].m_dI -= k3;
 					m_Hak[3].m_ifan[m_vaI].m_eI += i3;
@@ -609,14 +689,21 @@ public class Physics {
 					if (m_kI > 0)
 						j2 = (int) (((long) (m_longI - m_kI) << 32) / (long) m_longI >> 16);
 					int l2 = (int) ((long) m_AI * (long) j2 >> 16);
+					l2 = (int) ((long) l2 * (long) m_leanMagI >> 16);
 					int j3 = (int) ((long) k1 * (long) l2 >> 16);
 					int l3 = (int) ((long) l1 * (long) l2 >> 16);
 					int j4 = (int) ((long) j * (long) l2 >> 16);
 					int l4 = (int) ((long) i1 * (long) l2 >> 16);
-					if (m_TI > 32768)
-						m_TI = m_TI + 1638 >= 0x10000 ? 0x10000 : m_TI + 1638;
-					else
-						m_TI = m_TI + 3276 >= 0x10000 ? 0x10000 : m_TI + 3276;
+					// See lean-back branch above for what m_TI means and why
+					// we clamp to a target. Forward target sits between 32768
+					// (zero lean) and 0x10000 (full forward).
+					int targetTI_fwd = 32768 + (int) ((32768L * (long) m_leanMagI) >> 16);
+					int step_fwd = m_TI > 32768 ? 1638 : 3276;
+					if (m_TI < targetTI_fwd) {
+						m_TI = m_TI + step_fwd >= targetTI_fwd ? targetTI_fwd : m_TI + step_fwd;
+					} else if (m_TI > targetTI_fwd) {
+						m_TI = m_TI - step_fwd <= targetTI_fwd ? targetTI_fwd : m_TI - step_fwd;
+					}
 					m_Hak[4].m_ifan[m_vaI].m_eI += j3;
 					m_Hak[4].m_ifan[m_vaI].m_dI += l3;
 					m_Hak[3].m_ifan[m_vaI].m_eI -= j3;

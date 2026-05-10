@@ -101,19 +101,46 @@ public class Settings {
 	private static final String KEYPAD_LANDSCAPE_SIDE = "keypad_landscape_side";
 	private static final int KEYPAD_LANDSCAPE_SIDE_DEFAULT = KEYPAD_SIDE_NORMAL;
 
-	// Auto-hide the on-screen keypad after touch goes idle. Touching the
-	// screen always re-shows the keypad and resets the timer.
-	//   -1 = Always visible (no timer)
-	//    0 = Immediately (hide as soon as touch ends)
-	//   >0 = hide N seconds after touch ends
+	// Auto-hide the on-screen keypad after touch goes idle. For >0
+	// timeouts, touching the screen re-shows the keypad and resets the
+	// timer; for 0 it's a hard off-switch.
+	//   -1 = Always show (no timer)
+	//    0 = Always Hide (keypad fully disabled — does not show in menu
+	//        or in-game, touch does not wake it). Useful for controller-
+	//        only play; also fixes the menu case where a momentarily-
+	//        woken keypad would obscure the bottom items and eat scroll.
+	//   >0 = hide N seconds after touch ends; touch wakes
 	// Default Always so users without a pad don't lose their only input.
 	// The manual "Keyboard in menu" toggle still wins — if the user
 	// disabled it, the keypad stays hidden in menu regardless of touch.
-	public static final int CONTROLLER_AUTOHIDE_ALWAYS = -1;
-	public static final int CONTROLLER_AUTOHIDE_IMMEDIATELY = 0;
+	public static final int CONTROLLER_AUTOHIDE_ALWAYS_SHOW = -1;
 	public static final int[] CONTROLLER_AUTOHIDE_TIMEOUT_VALUES = {-1, 0, 5, 10, 15, 30};
 	private static final String CONTROLLER_AUTOHIDE_TIMEOUT_SEC = "controller_autohide_timeout_sec";
-	private static final int CONTROLLER_AUTOHIDE_TIMEOUT_SEC_DEFAULT = CONTROLLER_AUTOHIDE_ALWAYS;
+	private static final int CONTROLLER_AUTOHIDE_TIMEOUT_SEC_DEFAULT = CONTROLLER_AUTOHIDE_ALWAYS_SHOW;
+
+	// Stick deadzone for the analog gamepad channel — axis values whose
+	// magnitude is below this fraction of full deflection are treated as
+	// "centered" and don't drive the physics engine. Stored as a percent
+	// (* 100) to keep prefs readable and avoid float pref boilerplate;
+	// the controller divides by 100f before use. Order matches
+	// R.array.stick_deadzone_options (Precise / Default / Forgiving /
+	// Very forgiving). Default = 15% — same value the controller used
+	// hardcoded before this preset was added.
+	public static final int[] STICK_DEADZONE_PCT_VALUES = {8, 15, 25, 40};
+	private static final String STICK_DEADZONE_PCT = "stick_deadzone_pct";
+	private static final int STICK_DEADZONE_PCT_DEFAULT = 15;
+
+	// Stick mode for the analog gamepad channel. Analog (default) feeds
+	// magnitude-proportional values into the physics engine — half-pull
+	// produces half torque/throttle. Digital snaps each axis past the
+	// deadzone to ±1 / 0, making the stick behave like the d-pad
+	// (deadzone setting still applies — tells the snap how far the
+	// stick must travel before triggering). Order matches
+	// R.array.stick_mode_options.
+	public static final int STICK_MODE_ANALOG = 0;
+	public static final int STICK_MODE_DIGITAL = 1;
+	private static final String STICK_MODE = "stick_mode";
+	private static final int STICK_MODE_DEFAULT = STICK_MODE_ANALOG;
 
 	// Hide the status bar while the activity is in the foreground. The nav
 	// bar stays visible (separate concern; deferred). With
@@ -167,6 +194,8 @@ public class Settings {
 		setKeyboardInMenuEnabled(KEYBOARD_IN_MENU_ENABLED_DEFAULT);
 		setKeypadLandscapeSide(KEYPAD_LANDSCAPE_SIDE_DEFAULT);
 		setControllerAutoHideTimeoutSec(CONTROLLER_AUTOHIDE_TIMEOUT_SEC_DEFAULT);
+		setStickDeadzonePct(STICK_DEADZONE_PCT_DEFAULT);
+		setStickMode(STICK_MODE_DEFAULT);
 		setImmersiveModeEnabled(IMMERSIVE_MODE_ENABLED_DEFAULT);
 		setDarkModeEnabled(DARK_MODE_ENABLED_DEFAULT);
 		setInputOption(INPUT_OPTION_DEFAULT);
@@ -314,6 +343,22 @@ public class Settings {
 
 	public static void setControllerAutoHideTimeoutSec(int seconds) {
 		setInt(CONTROLLER_AUTOHIDE_TIMEOUT_SEC, seconds);
+	}
+
+	public static int getStickDeadzonePct() {
+		return preferences.getInt(STICK_DEADZONE_PCT, STICK_DEADZONE_PCT_DEFAULT);
+	}
+
+	public static void setStickDeadzonePct(int pct) {
+		setInt(STICK_DEADZONE_PCT, pct);
+	}
+
+	public static int getStickMode() {
+		return preferences.getInt(STICK_MODE, STICK_MODE_DEFAULT);
+	}
+
+	public static void setStickMode(int mode) {
+		setInt(STICK_MODE, mode);
 	}
 
 	public static boolean isImmersiveModeEnabled() {

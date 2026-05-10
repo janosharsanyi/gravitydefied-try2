@@ -2,7 +2,6 @@ package org.happysanta.gd;
 
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
-import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Rect;
@@ -1257,7 +1256,12 @@ public class GDActivity extends ComponentActivity implements Runnable {
         if (action == MotionEvent.ACTION_DOWN
                 || action == MotionEvent.ACTION_POINTER_DOWN) {
             cancelPendingKeypadHide();
-            if (keypadHiddenByIdle) {
+            // "Always Hide" — touch never wakes the keypad. Otherwise a
+            // touch in the menu (e.g. tapping a setting) would briefly
+            // pop the keypad up to obscure the bottom items and steal
+            // the gesture before the UP-side hide kicks in.
+            if (Settings.getControllerAutoHideTimeoutSec() != 0
+                    && keypadHiddenByIdle) {
                 keypadHiddenByIdle = false;
                 // Don't override the user's "Keyboard in menu = off" preference.
                 if (!menuShown || Settings.isKeyboardInMenuEnabled()) {
@@ -1286,7 +1290,7 @@ public class GDActivity extends ComponentActivity implements Runnable {
     private void scheduleKeypadHide() {
         keypadIdleHandler.removeCallbacks(keypadIdleRunnable);
         int timeoutSec = Settings.getControllerAutoHideTimeoutSec();
-        if (timeoutSec == Settings.CONTROLLER_AUTOHIDE_ALWAYS) {
+        if (timeoutSec == Settings.CONTROLLER_AUTOHIDE_ALWAYS_SHOW) {
             // Always visible — leave the keypad up.
             return;
         }
@@ -1305,8 +1309,8 @@ public class GDActivity extends ComponentActivity implements Runnable {
      * setting so the change takes effect immediately.
      */
     public void refreshKeypadIdleTimer() {
-        if (Settings.getControllerAutoHideTimeoutSec()
-                == Settings.CONTROLLER_AUTOHIDE_ALWAYS) {
+        int timeoutSec = Settings.getControllerAutoHideTimeoutSec();
+        if (timeoutSec == Settings.CONTROLLER_AUTOHIDE_ALWAYS_SHOW) {
             // Newly "Always" — pull the keypad back if the timer had hidden it.
             if (keypadHiddenByIdle) {
                 keypadHiddenByIdle = false;
@@ -1315,6 +1319,16 @@ public class GDActivity extends ComponentActivity implements Runnable {
                 }
             }
             cancelPendingKeypadHide();
+            return;
+        }
+        if (timeoutSec == 0) {
+            // Newly "Always Hide" — kill any pending timer and force the
+            // keypad away right now. Without this the user would have to
+            // touch the screen to see the change take effect, which is
+            // exactly the situation the setting exists to prevent (a
+            // touch on the keypad area also eats menu scroll).
+            cancelPendingKeypadHide();
+            hideKeyboardLayout();
             return;
         }
         scheduleKeypadHide();
@@ -1674,6 +1688,15 @@ public class GDActivity extends ComponentActivity implements Runnable {
         // Without this gate, every state transition would defeat the
         // auto-hide for a controller-only player.
         if (keypadHiddenByIdle) return;
+        // "Always Hide" is a hard off-switch (see Settings constant
+        // block). All show callers — gameToMenu / menuToGame / level
+        // change / rebuildKeypad — funnel through here, so this is the
+        // single chokepoint that makes the setting "everywhere". Force
+        // GONE defensively in case a state change raced with the flip.
+        if (Settings.getControllerAutoHideTimeoutSec() == 0) {
+            hideKeyboardLayout();
+            return;
+        }
         runOnUiThread(new Runnable() {
             @Override
             public void run() {

@@ -54,6 +54,8 @@
 	<string name="keyboard_in_menu">Keyboard in menu</string>
 	<string name="keypad_landscape_side">Keypad side (landscape)</string>
 	<string name="controller_autohide">Auto-hide keypad after</string>
+	<string name="stick_mode">Stick mode</string>
+	<string name="stick_deadzone">Stick deadzone</string>
 	<string name="immersive_mode">Immersive mode</string>
 	<string name="dark_mode">Dark mode</string>
 	<string name="clear_highscore">Clear highscore</string>
@@ -221,12 +223,26 @@
 
 	<!-- Order must match Settings.CONTROLLER_AUTOHIDE_TIMEOUT_VALUES. -->
 	<string-array name="controller_autohide_options">
-		<item>Always</item>
-		<item>Immediately</item>
+		<item>Show</item>
+		<item>Hide</item>
 		<item>5 sec</item>
 		<item>10 sec</item>
 		<item>15 sec</item>
 		<item>30 sec</item>
+	</string-array>
+
+	<!-- Order must match Settings.STICK_MODE_ANALOG / STICK_MODE_DIGITAL. -->
+	<string-array name="stick_mode_options">
+		<item>Analog</item>
+		<item>Digital</item>
+	</string-array>
+
+	<!-- Order must match Settings.STICK_DEADZONE_PCT_VALUES. -->
+	<string-array name="stick_deadzone_options">
+		<item>Precise</item>
+		<item>Default</item>
+		<item>Forgiving</item>
+		<item>Very forgiving</item>
 	</string-array>
 
 	<string-array name="leagues">

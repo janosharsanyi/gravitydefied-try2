@@ -53,9 +53,24 @@ Input
   (org.happysanta.gd.ControllerInputHandler): d-pad, left stick, A/B,
   Start, with semantic mapping that follows the active keyset in-game and
   the canonical menu-nav keys in menu.
+- Added analog channel into the physics engine (Physics._aIIVAnalog)
+  alongside the existing digital-numpad-key path. Left stick on a
+  physical gamepad now drives throttle / brake / lean proportional to
+  deflection: half-tilt produces visibly less torque or engine response
+  than full-tilt. Sign convention matches the original digital path
+  (stick up = accel, down = brake, left/right = lean), and keyboard /
+  on-screen keypad / d-pad / touch virtual-d-pad continue to take the
+  digital path with implicit full magnitude — no perceived change for
+  any non-stick input. Stick deadzone is configurable via a new
+  "Stick deadzone" option (Precise / Default / Forgiving / Very
+  forgiving); default 15% matches the value the analog channel
+  shipped with originally. A separate "Stick mode" option toggles
+  the analog magnitude path off entirely (Analog / Digital) — Digital
+  snaps each axis past the deadzone to ±1 / 0 so the stick behaves
+  like the d-pad while still going through the analog channel.
 - On-screen keypad reworked: bottom-anchored in both orientations
   (single strip in portrait, two corner clusters in landscape), with new
-  user setting "Auto-hide keypad after" (Always / Immediately / 5/10/15/30s)
+  user setting "Auto-hide keypad after" (Show / Hide / 5/10/15/30s)
   driven by a touch-idle timer.
 
 Display
