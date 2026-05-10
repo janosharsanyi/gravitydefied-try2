@@ -155,6 +155,28 @@ public class ControllerInputHandler {
             return true;
         }
 
+        // Android synthesizes KEYCODE_DPAD_* with FLAG_FALLBACK from analog
+        // joystick deflection for views that don't handle motion events. We
+        // DO handle them (dispatchAnalogStick), so in-game these fallbacks
+        // are pure double-input — they fire digital lean/throttle on top of
+        // the analog channel, which applyMergedInput's per-axis priority
+        // then pins to full magnitude regardless of the user's stick layout.
+        // Symptom: in DUAL_LEAN_LEFT the L-stick Y still drives throttle
+        // because L-stick deflection synthesizes DPAD_UP/DOWN with the
+        // fallback flag set, and accelKey()/brakeKey() fire from those.
+        // Real d-pad presses don't carry FLAG_FALLBACK, so they're
+        // unaffected. In menu mode we let the fallbacks through: users
+        // without a real d-pad rely on them for menu nav (the analog
+        // channel is suppressed in menus).
+        boolean isFallback = (event.getFlags() & KeyEvent.FLAG_FALLBACK) != 0;
+        boolean isDpad = code == KeyEvent.KEYCODE_DPAD_LEFT
+                || code == KeyEvent.KEYCODE_DPAD_RIGHT
+                || code == KeyEvent.KEYCODE_DPAD_UP
+                || code == KeyEvent.KEYCODE_DPAD_DOWN;
+        if (isFallback && isDpad && !gd.isMenuShown()) {
+            return true;
+        }
+
         boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
         switch (code) {
             case KeyEvent.KEYCODE_DPAD_LEFT:
