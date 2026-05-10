@@ -227,44 +227,62 @@ public class ControllerInputHandler {
         return changed;
     }
 
-    /** HAT (d-pad-as-axis) → digital, quantised to ±1/0 and sent as J2ME keys. */
+    /** HAT (d-pad-as-axis) → digital, quantised to ±1/0 and sent as J2ME keys.
+     *
+     *  <p>Per-axis source-coverage gate: process each HAT axis only when the
+     *  event's source actually carries it. On pads where the d-pad lives
+     *  under {@link InputDevice#SOURCE_DPAD} and the sticks under
+     *  {@link InputDevice#SOURCE_JOYSTICK}, an event from the joystick source
+     *  returns 0 for HAT_X/HAT_Y — without this gate, every stick wiggle
+     *  would trip the {@code sx != lastHatX} edge detector and fire a
+     *  phantom release of any held d-pad direction (then re-press on the
+     *  next real HAT event), producing a flicker.
+     */
     private boolean dispatchHat(MotionEvent event) {
-        float hx = event.getAxisValue(MotionEvent.AXIS_HAT_X);
-        float hy = event.getAxisValue(MotionEvent.AXIS_HAT_Y);
-
-        int sx = hx < -HAT_DEADZONE ? -1 : (hx > HAT_DEADZONE ? 1 : 0);
-        int sy = hy < -HAT_DEADZONE ? -1 : (hy > HAT_DEADZONE ? 1 : 0);
+        InputDevice device = event.getDevice();
+        int source = event.getSource();
+        boolean hasHatX = sourceHasAxis(device, source, MotionEvent.AXIS_HAT_X);
+        boolean hasHatY = sourceHasAxis(device, source, MotionEvent.AXIS_HAT_Y);
+        if (!hasHatX && !hasHatY) return false;
 
         boolean changed = false;
-        if (sx != lastHatX) {
-            if (heldByHatX != 0) {
-                sendKey(heldByHatX, false);
-                heldByHatX = 0;
+        if (hasHatX) {
+            float hx = event.getAxisValue(MotionEvent.AXIS_HAT_X);
+            int sx = hx < -HAT_DEADZONE ? -1 : (hx > HAT_DEADZONE ? 1 : 0);
+            if (sx != lastHatX) {
+                if (heldByHatX != 0) {
+                    sendKey(heldByHatX, false);
+                    heldByHatX = 0;
+                }
+                if (sx < 0) {
+                    heldByHatX = leftKey();
+                    sendKey(heldByHatX, true);
+                } else if (sx > 0) {
+                    heldByHatX = rightKey();
+                    sendKey(heldByHatX, true);
+                }
+                lastHatX = sx;
+                changed = true;
             }
-            if (sx < 0) {
-                heldByHatX = leftKey();
-                sendKey(heldByHatX, true);
-            } else if (sx > 0) {
-                heldByHatX = rightKey();
-                sendKey(heldByHatX, true);
-            }
-            lastHatX = sx;
-            changed = true;
         }
-        if (sy != lastHatY) {
-            if (heldByHatY != 0) {
-                sendKey(heldByHatY, false);
-                heldByHatY = 0;
+        if (hasHatY) {
+            float hy = event.getAxisValue(MotionEvent.AXIS_HAT_Y);
+            int sy = hy < -HAT_DEADZONE ? -1 : (hy > HAT_DEADZONE ? 1 : 0);
+            if (sy != lastHatY) {
+                if (heldByHatY != 0) {
+                    sendKey(heldByHatY, false);
+                    heldByHatY = 0;
+                }
+                if (sy < 0) {
+                    heldByHatY = accelKey();
+                    sendKey(heldByHatY, true);
+                } else if (sy > 0) {
+                    heldByHatY = brakeKey();
+                    sendKey(heldByHatY, true);
+                }
+                lastHatY = sy;
+                changed = true;
             }
-            if (sy < 0) {
-                heldByHatY = accelKey();
-                sendKey(heldByHatY, true);
-            } else if (sy > 0) {
-                heldByHatY = brakeKey();
-                sendKey(heldByHatY, true);
-            }
-            lastHatY = sy;
-            changed = true;
         }
         return changed;
     }
@@ -564,12 +582,25 @@ public class ControllerInputHandler {
     }
 
     /** True if {@code device} declares {@code axis} as a bipolar stick axis
-     *  (range crosses zero, half-extent on each side). Filters out
-     *  unipolar trigger axes that some pads put on Z/RZ. */
+     *  (range crosses zero, half-extent on each side) under <em>any</em>
+     *  source it exposes. Iterating {@link InputDevice#getMotionRanges()}
+     *  rather than querying {@link InputDevice.MotionRange} for a hardcoded
+     *  {@link InputDevice#SOURCE_JOYSTICK} avoids missing pads that publish
+     *  the right stick under {@code SOURCE_GAMEPAD} (or some other source)
+     *  only — those would otherwise fall through {@link #resolveRightStickAxes}
+     *  to the {-1, -1} sentinel and the right stick would be silently dead
+     *  in dual layouts. Still filters out unipolar trigger axes that some
+     *  pads put on Z/RZ: a unipolar range fails the min/max check on
+     *  every source. */
     private static boolean isBipolarStickAxis(InputDevice device, int axis) {
-        InputDevice.MotionRange range = device.getMotionRange(axis, InputDevice.SOURCE_JOYSTICK);
-        if (range == null) return false;
-        return range.getMin() < -0.5f && range.getMax() > 0.5f;
+        for (InputDevice.MotionRange range : device.getMotionRanges()) {
+            if (range.getAxis() == axis
+                    && range.getMin() < -0.5f
+                    && range.getMax() > 0.5f) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** True if the event's {@code source} actually carries {@code axis} on
