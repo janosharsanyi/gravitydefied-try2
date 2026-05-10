@@ -199,14 +199,26 @@ public class Settings {
 	private static final String BUTTON_AB_SWAP_ENABLED = "button_ab_swap_enabled";
 	private static final boolean BUTTON_AB_SWAP_ENABLED_DEFAULT = false;
 
-	// Hide the status bar while the activity is in the foreground. The nav
-	// bar stays visible (separate concern; deferred). With
+	// Hide the status bar while the activity is in the foreground. With
 	// BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE the user can swipe from the
 	// top to peek the bar back. Default off — preserve the original
 	// "system bars visible" feel; users who want a more fullscreen game
-	// can opt in.
+	// can opt in. Independent of {@link #IMMERSIVE_NAV_ENABLED}: each
+	// bar can be hidden separately.
 	private static final String IMMERSIVE_MODE_ENABLED = "immersive_mode_enabled";
 	private static final boolean IMMERSIVE_MODE_ENABLED_DEFAULT = false;
+
+	// Hide the navigation bar (the gesture/3-button bar at the bottom)
+	// while the activity is in the foreground. Same swipe-to-peek
+	// behaviour as IMMERSIVE_MODE_ENABLED — the BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+	// is a window-level setting that applies to whichever bars are
+	// hidden, so a single applyImmersiveMode() pass can toggle each
+	// bar independently. Default off — keep the original look unless
+	// the user opts in. Useful for gesture-nav devices where the
+	// bottom inset eats screen real estate the game could otherwise
+	// use.
+	private static final String IMMERSIVE_NAV_ENABLED = "immersive_nav_enabled";
+	private static final boolean IMMERSIVE_NAV_ENABLED_DEFAULT = false;
 
 	// AMOLED-friendly dark mode: flips the menu chrome and in-game sky to
 	// pitch black (0x000000) and the menu text to white. The track and
@@ -258,6 +270,7 @@ public class Settings {
 		setStickAxisFlip(STICK_AXIS_FLIP_DEFAULT);
 		setButtonAbSwapEnabled(BUTTON_AB_SWAP_ENABLED_DEFAULT);
 		setImmersiveModeEnabled(IMMERSIVE_MODE_ENABLED_DEFAULT);
+		setImmersiveNavEnabled(IMMERSIVE_NAV_ENABLED_DEFAULT);
 		setDarkModeEnabled(DARK_MODE_ENABLED_DEFAULT);
 		setInputOption(INPUT_OPTION_DEFAULT);
 		setLevelsSort(LEVELS_SORT_DEFAULT);
@@ -460,6 +473,14 @@ public class Settings {
 
 	public static void setImmersiveModeEnabled(boolean enabled) {
 		setBoolean(IMMERSIVE_MODE_ENABLED, enabled);
+	}
+
+	public static boolean isImmersiveNavEnabled() {
+		return preferences.getBoolean(IMMERSIVE_NAV_ENABLED, IMMERSIVE_NAV_ENABLED_DEFAULT);
+	}
+
+	public static void setImmersiveNavEnabled(boolean enabled) {
+		setBoolean(IMMERSIVE_NAV_ENABLED, enabled);
 	}
 
 	public static boolean isDarkModeEnabled() {

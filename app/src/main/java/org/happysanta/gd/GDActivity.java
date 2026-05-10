@@ -1374,17 +1374,25 @@ public class GDActivity extends ComponentActivity implements Runnable {
     }
 
     /**
-     * Apply the user's "Immersive mode" preference to the window's status
-     * bar. When enabled we hide just the status bar (nav bar stays — that's
-     * a separate, deferred concern) with
-     * {@link WindowInsetsControllerCompat#BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE}
-     * so a swipe from the top peeks the bar back without permanently
-     * un-hiding it. When disabled we show the status bar.
+     * Apply the user's status-bar / nav-bar hide preferences to the window.
+     * Each bar is controlled by its own setting:
+     * <ul>
+     *   <li>{@link Settings#isImmersiveModeEnabled} — hides the top status bar.</li>
+     *   <li>{@link Settings#isImmersiveNavEnabled} — hides the bottom nav bar.</li>
+     * </ul>
+     * Either, both, or neither can be hidden. When at least one is hidden
+     * we set {@link WindowInsetsControllerCompat#BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE}
+     * so the user can swipe from the affected edge to peek the hidden bar
+     * back without permanently un-hiding it. The behaviour is a window-
+     * level flag and is harmless when neither bar is hidden.
      *
      * <p>The root frame's inset listener (set up in {@link #onCreate}) keys
      * off {@link WindowInsetsCompat.Type#systemBars()}, which the platform
      * automatically reports as zero for hidden bars — so toggling
      * visibility here is sufficient; no inset-listener change is needed.
+     * When the nav bar is hidden the bottom inset becomes 0 and the game
+     * canvas / menu can use that strip; when re-shown the inset returns
+     * and the layout reflows.
      *
      * <p>Safe to call from any thread; the underlying controller calls run
      * on the UI thread.
@@ -1397,12 +1405,21 @@ public class GDActivity extends ComponentActivity implements Runnable {
                 WindowInsetsControllerCompat controller =
                         WindowCompat.getInsetsController(getWindow(), decor);
                 if (controller == null) return;
-                if (Settings.isImmersiveModeEnabled()) {
+                boolean hideStatus = Settings.isImmersiveModeEnabled();
+                boolean hideNav = Settings.isImmersiveNavEnabled();
+                if (hideStatus || hideNav) {
                     controller.setSystemBarsBehavior(
                             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                }
+                if (hideStatus) {
                     controller.hide(WindowInsetsCompat.Type.statusBars());
                 } else {
                     controller.show(WindowInsetsCompat.Type.statusBars());
+                }
+                if (hideNav) {
+                    controller.hide(WindowInsetsCompat.Type.navigationBars());
+                } else {
+                    controller.show(WindowInsetsCompat.Type.navigationBars());
                 }
             }
         });

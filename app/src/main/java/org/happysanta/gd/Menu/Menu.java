@@ -90,6 +90,7 @@ public class Menu
 	private OptionsMenuElement stickDeadzoneOptionItem;
 	private OptionsMenuElement buttonAbSwapOptionItem;
 	private OptionsMenuElement immersiveModeOptionItem;
+	private OptionsMenuElement immersiveNavOptionItem;
 	private OptionsMenuElement darkModeOptionItem;
 	private OptionsMenuElement vibrateOnTouchOptionItem;
 	private SimpleMenuElementNew clearHighscoreOptionItem;
@@ -425,6 +426,7 @@ public class Menu
 				stickDeadzoneOptionItem = new OptionsMenuElement(getString(R.string.stick_deadzone), stickDeadzoneIndexFromPct(Settings.getStickDeadzonePct()), this, stickDeadzoneStrings, false, optionsMenu);
 				buttonAbSwapOptionItem = new OptionsMenuElement(getString(R.string.button_ab_swap), Settings.isButtonAbSwapEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				immersiveModeOptionItem = new OptionsMenuElement(getString(R.string.immersive_mode), Settings.isImmersiveModeEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
+				immersiveNavOptionItem = new OptionsMenuElement(getString(R.string.immersive_nav), Settings.isImmersiveNavEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				darkModeOptionItem = new OptionsMenuElement(getString(R.string.dark_mode), Settings.isDarkModeEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				clearHighscoreOptionItem = new SimpleMenuElementNew(getString(R.string.clear_highscore), eraseScreen, this);
 
@@ -448,6 +450,7 @@ public class Menu
 				optionsMenu.addItem(stickDeadzoneOptionItem);
 				optionsMenu.addItem(buttonAbSwapOptionItem);
 				optionsMenu.addItem(immersiveModeOptionItem);
+				optionsMenu.addItem(immersiveNavOptionItem);
 				optionsMenu.addItem(darkModeOptionItem);
 				optionsMenu.addItem(clearHighscoreOptionItem);
 				optionsMenu.addItem(createAction(ActionMenuElement.BACK));
@@ -1251,6 +1254,11 @@ public class Menu
 		if (item == immersiveModeOptionItem) {
 			boolean enabled = ((OptionsMenuElement) item).getSelectedOption() == 0;
 			Settings.setImmersiveModeEnabled(enabled);
+			gd.applyImmersiveMode();
+		}
+		if (item == immersiveNavOptionItem) {
+			boolean enabled = ((OptionsMenuElement) item).getSelectedOption() == 0;
+			Settings.setImmersiveNavEnabled(enabled);
 			gd.applyImmersiveMode();
 		}
 		if (item == darkModeOptionItem) {

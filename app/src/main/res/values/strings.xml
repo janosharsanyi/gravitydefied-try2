@@ -61,6 +61,7 @@
 	<string name="stick_axis_flip">Stick X/Y swap</string>
 	<string name="button_ab_swap">Swap A/B buttons</string>
 	<string name="immersive_mode">Immersive mode</string>
+	<string name="immersive_nav">Hide nav bar</string>
 	<string name="dark_mode">Dark mode</string>
 	<string name="clear_highscore">Clear highscore</string>
 	<string name="full_reset">Full Reset</string>
