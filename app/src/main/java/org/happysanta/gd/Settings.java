@@ -47,6 +47,20 @@ public class Settings {
 	private static final String KEYPAD_LANDSCAPE_SIDE = "keypad_landscape_side";
 	private static final int KEYPAD_LANDSCAPE_SIDE_DEFAULT = KEYPAD_SIDE_NORMAL;
 
+	// Auto-hide the on-screen keypad after touch goes idle. Touching the
+	// screen always re-shows the keypad and resets the timer.
+	//   -1 = Always visible (no timer)
+	//    0 = Immediately (hide as soon as touch ends)
+	//   >0 = hide N seconds after touch ends
+	// Default Always so users without a pad don't lose their only input.
+	// The manual "Keyboard in menu" toggle still wins — if the user
+	// disabled it, the keypad stays hidden in menu regardless of touch.
+	public static final int CONTROLLER_AUTOHIDE_ALWAYS = -1;
+	public static final int CONTROLLER_AUTOHIDE_IMMEDIATELY = 0;
+	public static final int[] CONTROLLER_AUTOHIDE_TIMEOUT_VALUES = {-1, 0, 5, 10, 15, 30};
+	private static final String CONTROLLER_AUTOHIDE_TIMEOUT_SEC = "controller_autohide_timeout_sec";
+	private static final int CONTROLLER_AUTOHIDE_TIMEOUT_SEC_DEFAULT = CONTROLLER_AUTOHIDE_ALWAYS;
+
 	private static final String LAST_SEND_STATS = "last_send_stats";
 	private static final long LAST_SEND_STATS_DEFAULT = 0;
 
@@ -72,6 +86,7 @@ public class Settings {
 		setVibrateOnTouchEnabled(VIBRATE_ENABLED_DEFAULT);
 		setKeyboardInMenuEnabled(KEYBOARD_IN_MENU_ENABLED_DEFAULT);
 		setKeypadLandscapeSide(KEYPAD_LANDSCAPE_SIDE_DEFAULT);
+		setControllerAutoHideTimeoutSec(CONTROLLER_AUTOHIDE_TIMEOUT_SEC_DEFAULT);
 		setInputOption(INPUT_OPTION_DEFAULT);
 		setLevelsSort(LEVELS_SORT_DEFAULT);
 		setName(NAME_CHARS_DEFALUT);
@@ -139,6 +154,14 @@ public class Settings {
 
 	public static void setKeypadLandscapeSide(int side) {
 		setInt(KEYPAD_LANDSCAPE_SIDE, side);
+	}
+
+	public static int getControllerAutoHideTimeoutSec() {
+		return preferences.getInt(CONTROLLER_AUTOHIDE_TIMEOUT_SEC, CONTROLLER_AUTOHIDE_TIMEOUT_SEC_DEFAULT);
+	}
+
+	public static void setControllerAutoHideTimeoutSec(int seconds) {
+		setInt(CONTROLLER_AUTOHIDE_TIMEOUT_SEC, seconds);
 	}
 
 	public static boolean isVibrateOnTouchEnabled() {

@@ -81,6 +81,7 @@ public class Menu
 	private OptionsMenuElement lookAheadOptionItem;
 	private OptionsMenuElement keyboardInMenuOptionItem;
 	private OptionsMenuElement keypadLandscapeSideOptionItem;
+	private OptionsMenuElement controllerAutohideOptionItem;
 	private OptionsMenuElement vibrateOnTouchOptionItem;
 	private SimpleMenuElementNew clearHighscoreOptionItem;
 	private SimpleMenuElementNew fullResetItem;
@@ -139,6 +140,7 @@ public class Menu
 	private String[] onOffStrings = null;
 	private String[] keysetStrings = null;
 	private String[] keypadSideStrings = null;
+	private String[] controllerAutohideStrings = null;
 	// private EmptyLineMenuElement emptyLine;
 	// private EmptyLineMenuElement emptyLineBeforeAction;
 	// private AlertDialog alertDialog = null;
@@ -177,6 +179,7 @@ public class Menu
 				onOffStrings = getStringArray(R.array.on_off);
 				keysetStrings = getStringArray(R.array.keyset);
 				keypadSideStrings = getStringArray(R.array.keypad_side_options);
+				controllerAutohideStrings = getStringArray(R.array.controller_autohide_options);
 				difficultyLevels = getStringArray(R.array.difficulty);
 
 				// saveManager = new SaveManager();
@@ -390,6 +393,7 @@ public class Menu
 				vibrateOnTouchOptionItem = new OptionsMenuElement(getString(R.string.vibrate_on_touch), Settings.isVibrateOnTouchEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				keyboardInMenuOptionItem = new OptionsMenuElement(getString(R.string.keyboard_in_menu), Settings.isKeyboardInMenuEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				keypadLandscapeSideOptionItem = new OptionsMenuElement(getString(R.string.keypad_landscape_side), Settings.getKeypadLandscapeSide(), this, keypadSideStrings, false, optionsMenu);
+				controllerAutohideOptionItem = new OptionsMenuElement(getString(R.string.controller_autohide), controllerAutohideIndexFromSeconds(Settings.getControllerAutoHideTimeoutSec()), this, controllerAutohideStrings, false, optionsMenu);
 				clearHighscoreOptionItem = new SimpleMenuElementNew(getString(R.string.clear_highscore), eraseScreen, this);
 
 				// if (hasPointer)
@@ -403,6 +407,7 @@ public class Menu
 				optionsMenu.addItem(vibrateOnTouchOptionItem);
 				optionsMenu.addItem(keyboardInMenuOptionItem);
 				optionsMenu.addItem(keypadLandscapeSideOptionItem);
+				optionsMenu.addItem(controllerAutohideOptionItem);
 				optionsMenu.addItem(clearHighscoreOptionItem);
 				optionsMenu.addItem(createAction(ActionMenuElement.BACK));
 
@@ -1156,6 +1161,19 @@ public class Menu
 			if (enabled) gd.showKeyboardLayout();
 			else gd.hideKeyboardLayout();
 		}
+		if (item == controllerAutohideOptionItem) {
+			// Click cycles through the 5 timeout choices (Never/5/10/15/30s).
+			// Same _charvZ()-then-advance pattern as the other multi-state
+			// click-to-toggle items below.
+			if (controllerAutohideOptionItem._charvZ()) {
+				controllerAutohideOptionItem.setSelectedOption(
+						controllerAutohideOptionItem.getSelectedOption() + 1);
+			}
+			Settings.setControllerAutoHideTimeoutSec(
+					controllerAutohideSecondsFromIndex(controllerAutohideOptionItem.getSelectedOption()));
+			gd.refreshKeypadIdleTimer();
+			return;
+		}
 		if (item == keypadLandscapeSideOptionItem) {
 			// _charvZ() returns true when the user fired (clicked/tapped)
 			// the item rather than nudging it with left/right. For this
@@ -1496,6 +1514,27 @@ public class Menu
 		if (settingsLoadedOK)
 			settings[k] = byte0;
 	}*/
+
+	/**
+	 * Map a saved-seconds value (0/5/10/15/30) back to its index in
+	 * {@link Settings#CONTROLLER_AUTOHIDE_TIMEOUT_VALUES} for display in the
+	 * options menu. Falls through to index 0 (Never) for unknown values so
+	 * a corrupt or future preference doesn't crash the menu.
+	 */
+	private static int controllerAutohideIndexFromSeconds(int seconds) {
+		int[] vals = Settings.CONTROLLER_AUTOHIDE_TIMEOUT_VALUES;
+		for (int i = 0; i < vals.length; i++) {
+			if (vals[i] == seconds) return i;
+		}
+		return 0;
+	}
+
+	/** Inverse of {@link #controllerAutohideIndexFromSeconds(int)}. */
+	private static int controllerAutohideSecondsFromIndex(int index) {
+		int[] vals = Settings.CONTROLLER_AUTOHIDE_TIMEOUT_VALUES;
+		if (index < 0 || index >= vals.length) return vals[0];
+		return vals[index];
+	}
 
 	private void resetAll() {
 		Settings.resetAll();

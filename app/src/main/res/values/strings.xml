@@ -52,6 +52,7 @@
 	<string name="vibrate_on_touch">Vibrate on touch</string>
 	<string name="keyboard_in_menu">Keyboard in menu</string>
 	<string name="keypad_landscape_side">Keypad side (landscape)</string>
+	<string name="controller_autohide">Auto-hide keypad after</string>
 	<string name="clear_highscore">Clear highscore</string>
 	<string name="full_reset">Full Reset</string>
 	<string name="reset">Reset</string>
@@ -188,6 +189,16 @@
 	<string-array name="keypad_side_options">
 		<item>Normal</item>
 		<item>Flipped</item>
+	</string-array>
+
+	<!-- Order must match Settings.CONTROLLER_AUTOHIDE_TIMEOUT_VALUES. -->
+	<string-array name="controller_autohide_options">
+		<item>Always</item>
+		<item>Immediately</item>
+		<item>5 sec</item>
+		<item>10 sec</item>
+		<item>15 sec</item>
+		<item>30 sec</item>
 	</string-array>
 
 	<string-array name="leagues">

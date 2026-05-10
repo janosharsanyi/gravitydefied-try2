@@ -9,6 +9,8 @@ import android.graphics.Rect;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.OpenableColumns;
 import android.text.Html;
 import android.view.*;
@@ -107,6 +109,25 @@ public class GDActivity extends ComponentActivity implements Runnable {
     private FrameLayout frame;
     private MenuLinearLayout menuLayout;
     private KeyboardController keyboardController;
+    /** Translates physical gamepad input to J2ME keypresses. Mirrors what
+     *  KeyboardController does for touch input. */
+    private ControllerInputHandler controllerInput;
+    /** True when the on-screen keypad was hidden by the touch-idle auto-hide
+     *  timer. Used to distinguish that hide from a "Keyboard in menu = off"
+     *  hide so the next touch can resurrect it without overriding the user's
+     *  manual setting. */
+    private boolean keypadHiddenByIdle = false;
+    /** Hides the on-screen keypad after
+     *  {@link Settings#getControllerAutoHideTimeoutSec()} seconds without a
+     *  screen touch. Posted/cleared from {@link #pingTouchActivity()}. */
+    private final Handler keypadIdleHandler = new Handler(Looper.getMainLooper());
+    private final Runnable keypadIdleRunnable = new Runnable() {
+        @Override
+        public void run() {
+            keypadHiddenByIdle = true;
+            hideKeyboardLayout();
+        }
+    };
     private boolean isNormalAndroid = true;
     private boolean buttonCoordsCalculated = false;
     public TextView menuTitleTextView;
@@ -343,6 +364,7 @@ public class GDActivity extends ComponentActivity implements Runnable {
             }
 
             keyboardController = new KeyboardController(this);
+            controllerInput = new ControllerInputHandler(this);
 
             // Outer container — children (cluster views) handle touches via
             // their own listeners, so this one must NOT intercept.
@@ -1190,6 +1212,109 @@ public class GDActivity extends ComponentActivity implements Runnable {
                 && keyboardLayout.getVisibility() == android.view.View.VISIBLE;
     }
 
+    // --- Gamepad input ----------------------------------------------------
+    //
+    // We intercept at the activity level (rather than overriding GameView's
+    // onKeyDown / onGenericMotionEvent) so events fire regardless of which
+    // view currently has focus — the on-screen keypad container, the menu
+    // scroll view, or the GameView itself. ControllerInputHandler is the
+    // sole arbiter; if it doesn't recognise the event we fall through to
+    // the default super behaviour so things like KEYCODE_BACK keep working.
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (controllerInput != null && controllerInput.dispatchKey(event)) return true;
+        return super.dispatchKeyEvent(event);
+    }
+
+    @Override
+    public boolean dispatchGenericMotionEvent(MotionEvent event) {
+        if (controllerInput != null && controllerInput.dispatchMotion(event)) return true;
+        return super.dispatchGenericMotionEvent(event);
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        // Touch DOWN cancels any pending hide and resurrects an idle-hidden
+        // keypad. Touch UP (re)arms the hide timer. Scheduling on UP rather
+        // than DOWN matters for the "Immediately" (0 ms) setting: we must
+        // not yank the keypad view away mid-gesture, or KeyboardController
+        // never sees the matching ACTION_UP and the J2ME key sticks down.
+        int action = ev.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN
+                || action == MotionEvent.ACTION_POINTER_DOWN) {
+            cancelPendingKeypadHide();
+            if (keypadHiddenByIdle) {
+                keypadHiddenByIdle = false;
+                // Don't override the user's "Keyboard in menu = off" preference.
+                if (!menuShown || Settings.isKeyboardInMenuEnabled()) {
+                    showKeyboardLayout();
+                }
+            }
+        } else if (action == MotionEvent.ACTION_UP
+                || action == MotionEvent.ACTION_CANCEL) {
+            // Last finger up — arm the auto-hide timer (cancel if Always).
+            scheduleKeypadHide();
+        }
+        return super.dispatchTouchEvent(ev);
+    }
+
+    /**
+     * Arm (or cancel) the touch-idle auto-hide timer per the current
+     * {@link Settings#getControllerAutoHideTimeoutSec()} setting:
+     * <ul>
+     *   <li>{@code -1} (Always visible) — cancel any pending hide.</li>
+     *   <li>{@code  0} (Immediately) — post a hide with no delay.</li>
+     *   <li>{@code >0} — post a hide N seconds out.</li>
+     * </ul>
+     * Safe to call from any thread; {@link Handler} dispatches on the
+     * main looper which is what {@link #hideKeyboardLayout()} expects.
+     */
+    private void scheduleKeypadHide() {
+        keypadIdleHandler.removeCallbacks(keypadIdleRunnable);
+        int timeoutSec = Settings.getControllerAutoHideTimeoutSec();
+        if (timeoutSec == Settings.CONTROLLER_AUTOHIDE_ALWAYS) {
+            // Always visible — leave the keypad up.
+            return;
+        }
+        long delayMs = timeoutSec <= 0 ? 0L : timeoutSec * 1000L;
+        keypadIdleHandler.postDelayed(keypadIdleRunnable, delayMs);
+    }
+
+    private void cancelPendingKeypadHide() {
+        keypadIdleHandler.removeCallbacks(keypadIdleRunnable);
+    }
+
+    /**
+     * Hook for callers that change the idle-hide setting (e.g. the menu
+     * options handler). If the user just selected "Always", restore the
+     * keypad if we'd hidden it. Then re-arm the timer with the new
+     * setting so the change takes effect immediately.
+     */
+    public void refreshKeypadIdleTimer() {
+        if (Settings.getControllerAutoHideTimeoutSec()
+                == Settings.CONTROLLER_AUTOHIDE_ALWAYS) {
+            // Newly "Always" — pull the keypad back if the timer had hidden it.
+            if (keypadHiddenByIdle) {
+                keypadHiddenByIdle = false;
+                if (!menuShown || Settings.isKeyboardInMenuEnabled()) {
+                    showKeyboardLayout();
+                }
+            }
+            cancelPendingKeypadHide();
+            return;
+        }
+        scheduleKeypadHide();
+    }
+
+    /**
+     * Invoked when the controller's start / B-in-menu fires — same effect as
+     * the system back button (in-game opens the menu, in-menu pops a screen).
+     */
+    public void controllerBackPress() {
+        getOnBackPressedDispatcher().onBackPressed();
+    }
+
     /**
      * Build a single cluster sub-view from a {@code keys} grid of J2ME-style
      * key numbers (1-9; use 0 for "no key" cells, though no current cluster
@@ -1369,6 +1494,15 @@ public class GDActivity extends ComponentActivity implements Runnable {
 
     // @UiThread
     public void showKeyboardLayout() {
+        // Honor the touch-idle hide across transitions: if the keypad was
+        // hidden because the user wasn't touching the screen, don't
+        // resurrect it on a programmatic show — level change, gameToMenu /
+        // menuToGame triggered by controller, etc. The user can touch the
+        // screen at any time to bring it back (pingTouchActivity() clears
+        // the flag before re-calling us, so the touch path still works).
+        // Without this gate, every state transition would defeat the
+        // auto-hide for a controller-only player.
+        if (keypadHiddenByIdle) return;
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
@@ -1391,6 +1525,10 @@ public class GDActivity extends ComponentActivity implements Runnable {
                 scrollView.setLayoutParams(params);
             }
         });
+        // Auto-hide is touch-idle-driven, so non-touch shows (level change,
+        // menuToGame, rebuildKeypad) need an explicit arm — otherwise the
+        // keypad reappears and stays up forever until the user touches it.
+        scheduleKeypadHide();
     }
 
     public void addCommand(Command cmd) {

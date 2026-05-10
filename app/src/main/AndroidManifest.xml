@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Advisory only — we support gamepad input but don't require it. -->
+    <uses-feature android:name="android.hardware.gamepad" android:required="false" />
+
     <application
         android:name=".GDApplication"
         android:allowBackup="true"
