@@ -90,10 +90,20 @@ public class Settings {
 	private static final String TRACK_COLOR = "track_color";
 	private static final int TRACK_COLOR_DEFAULT = TRACK_COLOR_ORIGINAL;
 
+	// Custom-channel kind selector for getTrackCustomChannel /
+	// setTrackCustomChannel / trackCustomChannelKey. Three independent
+	// color triples per Custom slot: FG (ground contour), BG (raised
+	// projection), FILL (the optional third color used when
+	// MAP_FILL_MODE_THIRD is active). Kept as constants rather than an
+	// enum to stay in one ABI with the int channel argument.
+	public static final int TRACK_CUSTOM_KIND_FG   = 0;
+	public static final int TRACK_CUSTOM_KIND_BG   = 1;
+	public static final int TRACK_CUSTOM_KIND_FILL = 2;
+
 	// Per-channel storage for the three Custom track presets. Each slot
-	// holds six int prefs (FG R/G/B and BG R/G/B). Sentinel -1 means
-	// "uninitialized" — getTrackCustomChannel seeds the slot from
-	// TRACK_COLOR_ORIGINAL on the first read.
+	// holds nine int prefs (FG R/G/B, BG R/G/B, and FILL R/G/B). Sentinel
+	// -1 means "uninitialized" — getTrackCustomChannel seeds the slot
+	// from TRACK_COLOR_ORIGINAL on the first read.
 	private static final String[] TRACK_CUSTOM_FG_R = {
 			"track_custom_1_fg_r", "track_custom_2_fg_r", "track_custom_3_fg_r"};
 	private static final String[] TRACK_CUSTOM_FG_G = {
@@ -106,6 +116,12 @@ public class Settings {
 			"track_custom_1_bg_g", "track_custom_2_bg_g", "track_custom_3_bg_g"};
 	private static final String[] TRACK_CUSTOM_BG_B = {
 			"track_custom_1_bg_b", "track_custom_2_bg_b", "track_custom_3_bg_b"};
+	private static final String[] TRACK_CUSTOM_FILL_R = {
+			"track_custom_1_fill_r", "track_custom_2_fill_r", "track_custom_3_fill_r"};
+	private static final String[] TRACK_CUSTOM_FILL_G = {
+			"track_custom_1_fill_g", "track_custom_2_fill_g", "track_custom_3_fill_g"};
+	private static final String[] TRACK_CUSTOM_FILL_B = {
+			"track_custom_1_fill_b", "track_custom_2_fill_b", "track_custom_3_fill_b"};
 
 	// Per-channel storage for the three Custom neon presets. Each slot
 	// holds three int prefs (R/G/B). Sentinel -1 means uninitialized —
@@ -130,6 +146,34 @@ public class Settings {
 	public static final int MAP_COLOR_GRADIENT_INVERTED = 2;
 	private static final String MAP_COLOR_GRADIENT = "map_color_gradient";
 	private static final int MAP_COLOR_GRADIENT_DEFAULT = MAP_COLOR_GRADIENT_OFF;
+
+	// Perspective-mode fill between the ground contour and the raised
+	// projection. OFF preserves the upstream wireframe look (no fill —
+	// sky shows through). The three solid modes paint the area between
+	// the two curves in a single color: FG matches the ground line,
+	// BG matches the raised line, THIRD pulls a curated palette entry
+	// from getTrackFillArgb that lives between FG and BG. GRADIENT
+	// fills with a strip-fill (N=6 trapezoidal bands) ramping from
+	// fgColor at the ground edge to bgColor at the raised edge —
+	// same interpolation direction the across-tick gradient already
+	// uses, computed via interpArgb (no shader, no per-frame
+	// allocations). Default OFF — visual parity with the wireframe.
+	public static final int MAP_FILL_MODE_OFF      = 0;
+	public static final int MAP_FILL_MODE_FG       = 1;
+	public static final int MAP_FILL_MODE_BG       = 2;
+	public static final int MAP_FILL_MODE_THIRD    = 3;
+	public static final int MAP_FILL_MODE_GRADIENT = 4;
+	private static final String MAP_FILL_MODE = "map_fill_mode";
+	private static final int MAP_FILL_MODE_DEFAULT = MAP_FILL_MODE_OFF;
+
+	// Independent toggle for the across-tick ribs (the 6 short
+	// line segments per track segment running from the ground point
+	// up to the raised projection). Separated from MAP_FILL_MODE so
+	// users can mix freely — e.g. solid fill with ticks overlay, or
+	// gradient fill with ticks off for a cleaner look. Default ON
+	// preserves upstream visual output.
+	private static final String MAP_ACROSS_TICKS_ENABLED = "map_across_ticks_enabled";
+	private static final boolean MAP_ACROSS_TICKS_ENABLED_DEFAULT = true;
 
 	// One-time migration when the legacy "Green" preset was removed.
 	// Pre-migration encoding: ORIGINAL=0, GREEN=1, CYAN=2, RED=3, YELLOW=4,
@@ -499,6 +543,27 @@ public class Settings {
 		setInt(MAP_COLOR_GRADIENT, mode);
 	}
 
+	public static int getMapFillMode() {
+		int mode = preferences.getInt(MAP_FILL_MODE, MAP_FILL_MODE_DEFAULT);
+		// Valid range OFF..GRADIENT (0..4). Defensive clamp — same
+		// shape as getMapColorGradient above.
+		if (mode < MAP_FILL_MODE_OFF || mode > MAP_FILL_MODE_GRADIENT)
+			return MAP_FILL_MODE_DEFAULT;
+		return mode;
+	}
+
+	public static void setMapFillMode(int mode) {
+		setInt(MAP_FILL_MODE, mode);
+	}
+
+	public static boolean isAcrossTicksEnabled() {
+		return preferences.getBoolean(MAP_ACROSS_TICKS_ENABLED, MAP_ACROSS_TICKS_ENABLED_DEFAULT);
+	}
+
+	public static void setAcrossTicksEnabled(boolean enabled) {
+		setBoolean(MAP_ACROSS_TICKS_ENABLED, enabled);
+	}
+
 	// 0xAARRGGBB color for the FOREGROUND line — drawn between actual
 	// ground points (the lower / front line visually). Brighter of the two
 	// preset colors. Original returns upstream's perspective-off bright
@@ -522,9 +587,9 @@ public class Settings {
 			case TRACK_COLOR_CUSTOM_2:
 			case TRACK_COLOR_CUSTOM_3: {
 				int slot = mode - TRACK_COLOR_CUSTOM_1;
-				int r = getTrackCustomChannel(slot, false, 0);
-				int g = getTrackCustomChannel(slot, false, 1);
-				int b = getTrackCustomChannel(slot, false, 2);
+				int r = getTrackCustomChannel(slot, TRACK_CUSTOM_KIND_FG, 0);
+				int g = getTrackCustomChannel(slot, TRACK_CUSTOM_KIND_FG, 1);
+				int b = getTrackCustomChannel(slot, TRACK_CUSTOM_KIND_FG, 2);
 				return 0xff000000 | (r << 16) | (g << 8) | b;
 			}
 			default: return 0;
@@ -551,9 +616,45 @@ public class Settings {
 			case TRACK_COLOR_CUSTOM_2:
 			case TRACK_COLOR_CUSTOM_3: {
 				int slot = mode - TRACK_COLOR_CUSTOM_1;
-				int r = getTrackCustomChannel(slot, true, 0);
-				int g = getTrackCustomChannel(slot, true, 1);
-				int b = getTrackCustomChannel(slot, true, 2);
+				int r = getTrackCustomChannel(slot, TRACK_CUSTOM_KIND_BG, 0);
+				int g = getTrackCustomChannel(slot, TRACK_CUSTOM_KIND_BG, 1);
+				int b = getTrackCustomChannel(slot, TRACK_CUSTOM_KIND_BG, 2);
+				return 0xff000000 | (r << 16) | (g << 8) | b;
+			}
+			default: return 0;
+		}
+	}
+
+	// 0xAARRGGBB third color for solid MAP_FILL_MODE_THIRD — the fill
+	// painted between the FG and BG lines in perspective mode. Curated
+	// per built-in preset to land visually between FG and BG so both
+	// outline lines stay readable on top of it; for Custom 1-3 it pulls
+	// from a third R/G/B pref triple alongside the FG/BG triples.
+	// Default for an uninitialized Custom FILL channel seeds from
+	// Original's mid-green (#007F00) — see getTrackCustomChannel.
+	public static int getTrackFillArgb(int mode) {
+		switch (mode) {
+			case TRACK_COLOR_ORIGINAL: return 0xff007F00;
+			case TRACK_COLOR_CYAN:    return 0xff79B9C6;
+			case TRACK_COLOR_RED:     return 0xffC67979;
+			case TRACK_COLOR_YELLOW:  return 0xffC6C679;
+			case TRACK_COLOR_LIME:    return 0xff79C679;
+			case TRACK_COLOR_BLUE:    return 0xff7979C6;
+			case TRACK_COLOR_GRAY:    return 0xff9F9F9F;
+			// BW must satisfy: contrast with both the FG line (lighter
+			// of the two) and the BG line (darker). In dark mode FG is
+			// white and BG is light gray — pick a mid-gray that sits
+			// between them. In light mode FG is mid-gray and BG is
+			// black — pick a darker gray nearer black so the FG line
+			// keeps its prominence.
+			case TRACK_COLOR_BW:      return isDarkModeEnabled() ? 0xff666666 : 0xff333333;
+			case TRACK_COLOR_CUSTOM_1:
+			case TRACK_COLOR_CUSTOM_2:
+			case TRACK_COLOR_CUSTOM_3: {
+				int slot = mode - TRACK_COLOR_CUSTOM_1;
+				int r = getTrackCustomChannel(slot, TRACK_CUSTOM_KIND_FILL, 0);
+				int g = getTrackCustomChannel(slot, TRACK_CUSTOM_KIND_FILL, 1);
+				int b = getTrackCustomChannel(slot, TRACK_CUSTOM_KIND_FILL, 2);
 				return 0xff000000 | (r << 16) | (g << 8) | b;
 			}
 			default: return 0;
@@ -561,34 +662,44 @@ public class Settings {
 	}
 
 	// Read one R/G/B channel (channel 0=R, 1=G, 2=B) of a track Custom
-	// slot's FG or BG color. Returns 0..255. Sentinel -1 in the pref means
-	// "uninitialized" — fall through to the seed value pulled from
-	// TRACK_COLOR_ORIGINAL so Custom slots open with a sensible
-	// not-zero-black appearance and the user can edit from there.
-	public static int getTrackCustomChannel(int slot, boolean isBackground, int channel) {
-		String key = trackCustomChannelKey(slot, isBackground, channel);
+	// slot's FG, BG, or FILL color (kind = TRACK_CUSTOM_KIND_*). Returns
+	// 0..255. Sentinel -1 in the pref means "uninitialized" — fall
+	// through to the seed value pulled from TRACK_COLOR_ORIGINAL so
+	// Custom slots open with a sensible not-zero-black appearance and
+	// the user can edit from there.
+	public static int getTrackCustomChannel(int slot, int kind, int channel) {
+		String key = trackCustomChannelKey(slot, kind, channel);
 		int v = preferences.getInt(key, -1);
 		if (v < 0 || v > 255) {
-			int seed = isBackground
-					? getTrackBackgroundArgb(TRACK_COLOR_ORIGINAL)
-					: getTrackForegroundArgb(TRACK_COLOR_ORIGINAL);
+			int seed;
+			switch (kind) {
+				case TRACK_CUSTOM_KIND_BG:   seed = getTrackBackgroundArgb(TRACK_COLOR_ORIGINAL); break;
+				case TRACK_CUSTOM_KIND_FILL: seed = getTrackFillArgb(TRACK_COLOR_ORIGINAL);       break;
+				default:                     seed = getTrackForegroundArgb(TRACK_COLOR_ORIGINAL); break;
+			}
 			return (seed >> (16 - channel * 8)) & 0xff;
 		}
 		return v;
 	}
 
-	public static void setTrackCustomChannel(int slot, boolean isBackground, int channel, int value) {
+	public static void setTrackCustomChannel(int slot, int kind, int channel, int value) {
 		if (value < 0) value = 0;
 		if (value > 255) value = 255;
-		setInt(trackCustomChannelKey(slot, isBackground, channel), value);
+		setInt(trackCustomChannelKey(slot, kind, channel), value);
 	}
 
-	private static String trackCustomChannelKey(int slot, boolean isBackground, int channel) {
+	private static String trackCustomChannelKey(int slot, int kind, int channel) {
 		String[] arr;
-		if (isBackground) {
-			arr = (channel == 0) ? TRACK_CUSTOM_BG_R : (channel == 1) ? TRACK_CUSTOM_BG_G : TRACK_CUSTOM_BG_B;
-		} else {
-			arr = (channel == 0) ? TRACK_CUSTOM_FG_R : (channel == 1) ? TRACK_CUSTOM_FG_G : TRACK_CUSTOM_FG_B;
+		switch (kind) {
+			case TRACK_CUSTOM_KIND_BG:
+				arr = (channel == 0) ? TRACK_CUSTOM_BG_R : (channel == 1) ? TRACK_CUSTOM_BG_G : TRACK_CUSTOM_BG_B;
+				break;
+			case TRACK_CUSTOM_KIND_FILL:
+				arr = (channel == 0) ? TRACK_CUSTOM_FILL_R : (channel == 1) ? TRACK_CUSTOM_FILL_G : TRACK_CUSTOM_FILL_B;
+				break;
+			default: // TRACK_CUSTOM_KIND_FG
+				arr = (channel == 0) ? TRACK_CUSTOM_FG_R : (channel == 1) ? TRACK_CUSTOM_FG_G : TRACK_CUSTOM_FG_B;
+				break;
 		}
 		return arr[slot];
 	}
@@ -603,19 +714,23 @@ public class Settings {
 		return -1;
 	}
 
-	// Snapshot the FG/BG channels of any track preset (built-in or Custom)
-	// into the given Custom slot. Used by the copy-into-Custom action: the
-	// six channels are written so subsequent edits start from the chosen
-	// preset's exact values.
+	// Snapshot the FG/BG/FILL channels of any track preset (built-in or
+	// Custom) into the given Custom slot. Used by the copy-into-Custom
+	// action: the nine channels are written so subsequent edits start
+	// from the chosen preset's exact values.
 	public static void copyTrackPresetIntoCustom(int srcMode, int dstSlot) {
-		int fg = getTrackForegroundArgb(srcMode);
-		int bg = getTrackBackgroundArgb(srcMode);
-		setTrackCustomChannel(dstSlot, false, 0, (fg >> 16) & 0xff);
-		setTrackCustomChannel(dstSlot, false, 1, (fg >> 8) & 0xff);
-		setTrackCustomChannel(dstSlot, false, 2, fg & 0xff);
-		setTrackCustomChannel(dstSlot, true, 0, (bg >> 16) & 0xff);
-		setTrackCustomChannel(dstSlot, true, 1, (bg >> 8) & 0xff);
-		setTrackCustomChannel(dstSlot, true, 2, bg & 0xff);
+		int fg   = getTrackForegroundArgb(srcMode);
+		int bg   = getTrackBackgroundArgb(srcMode);
+		int fill = getTrackFillArgb(srcMode);
+		setTrackCustomChannel(dstSlot, TRACK_CUSTOM_KIND_FG,   0, (fg   >> 16) & 0xff);
+		setTrackCustomChannel(dstSlot, TRACK_CUSTOM_KIND_FG,   1, (fg   >>  8) & 0xff);
+		setTrackCustomChannel(dstSlot, TRACK_CUSTOM_KIND_FG,   2,  fg          & 0xff);
+		setTrackCustomChannel(dstSlot, TRACK_CUSTOM_KIND_BG,   0, (bg   >> 16) & 0xff);
+		setTrackCustomChannel(dstSlot, TRACK_CUSTOM_KIND_BG,   1, (bg   >>  8) & 0xff);
+		setTrackCustomChannel(dstSlot, TRACK_CUSTOM_KIND_BG,   2,  bg          & 0xff);
+		setTrackCustomChannel(dstSlot, TRACK_CUSTOM_KIND_FILL, 0, (fill >> 16) & 0xff);
+		setTrackCustomChannel(dstSlot, TRACK_CUSTOM_KIND_FILL, 1, (fill >>  8) & 0xff);
+		setTrackCustomChannel(dstSlot, TRACK_CUSTOM_KIND_FILL, 2,  fill        & 0xff);
 	}
 
 	// Read one R/G/B channel (channel 0=R, 1=G, 2=B) of a neon Custom

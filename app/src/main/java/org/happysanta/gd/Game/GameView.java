@@ -38,6 +38,15 @@ public class GameView extends View {
 	int m_agI;
 	int m_gI;
 	private Canvas canvas;
+	// Reused per-frame for the perspective-mode fill render path. Path
+	// and Paint are allocated once at view construction and mutated in
+	// place (rewind() keeps the vertex buffer; setColor(int) mutates an
+	// existing field). No `new` in the per-segment hot path. AA is
+	// deliberately off — the surrounding line render also draws without
+	// AA, and matching that keeps fill edges crisp against the strokes.
+	private final Path fillPath = new Path();
+	private final Paint fillPaint = new Paint();
+	{ fillPaint.setStyle(Paint.Style.FILL); /* AA stays off — matches the surrounding line render */ }
 	private int m_XI;
 	private int m_BI;
 	private Physics physEngine;
@@ -576,6 +585,69 @@ public class GameView extends View {
 
 	public void _aIIIV(int j, int k, int l, int i1) {
 		canvas.drawLine(offsetX(j), offsetY(k), offsetX(l), offsetY(i1), paint);
+	}
+
+	// Fill one perspective-mode track segment quadrilateral with a
+	// solid color. The quad is ABCD with A,B on the ground curve and
+	// D,C on the raised projection. Same (coord << 3) >> 16 shift the
+	// line render uses so the fill aligns pixel-exactly with the
+	// strokes drawn over it.
+	public void fillTrackQuadSolid(int ax, int ay, int bx, int by,
+								   int cx, int cy, int dx, int dy, int color) {
+		float aX = offsetX((ax << 3) >> 16), aY = offsetY((ay << 3) >> 16);
+		float bX = offsetX((bx << 3) >> 16), bY = offsetY((by << 3) >> 16);
+		float cX = offsetX((cx << 3) >> 16), cY = offsetY((cy << 3) >> 16);
+		float dX = offsetX((dx << 3) >> 16), dY = offsetY((dy << 3) >> 16);
+
+		fillPath.rewind();
+		fillPath.moveTo(aX, aY);
+		fillPath.lineTo(bX, bY);
+		fillPath.lineTo(cX, cY);
+		fillPath.lineTo(dX, dY);
+		fillPath.close();
+		fillPaint.setColor(color);
+		canvas.drawPath(fillPath, fillPaint);
+	}
+
+	// Fill one perspective-mode track segment quadrilateral with a
+	// strip-fill gradient. The quad ABCD is sliced into N=6 trapezoidal
+	// bands parallel to the ground edge AB and the raised edge DC; each
+	// band is painted with a single interpolated color from stripColors,
+	// pre-computed once per frame by Level._aiIV via interpArgb. No
+	// shader, no per-call allocation — see CLAUDE.md (gravitydefied)
+	// performance notes in plans-perspective-fill.md.
+	public void fillTrackQuadGradient(int ax, int ay, int bx, int by,
+									  int cx, int cy, int dx, int dy,
+									  int[] stripColors) {
+		final int N = 6;
+		float aX = offsetX((ax << 3) >> 16), aY = offsetY((ay << 3) >> 16);
+		float bX = offsetX((bx << 3) >> 16), bY = offsetY((by << 3) >> 16);
+		float cX = offsetX((cx << 3) >> 16), cY = offsetY((cy << 3) >> 16);
+		float dX = offsetX((dx << 3) >> 16), dY = offsetY((dy << 3) >> 16);
+
+		// Per-edge ground→raised vectors (left edge A→D, right edge B→C).
+		// Strip n covers the slice [n/N .. (n+1)/N] along these edges.
+		float lDx = dX - aX, lDy = dY - aY;
+		float rDx = cX - bX, rDy = cY - bY;
+
+		for (int n = 0; n < N; n++) {
+			float t0 = (float) n / N;
+			float t1 = (float) (n + 1) / N;
+
+			float lLx = aX + t0 * lDx, lLy = aY + t0 * lDy; // left  lower
+			float lRx = bX + t0 * rDx, lRy = bY + t0 * rDy; // right lower
+			float uLx = aX + t1 * lDx, uLy = aY + t1 * lDy; // left  upper
+			float uRx = bX + t1 * rDx, uRy = bY + t1 * rDy; // right upper
+
+			fillPath.rewind();
+			fillPath.moveTo(lLx, lLy);
+			fillPath.lineTo(lRx, lRy);
+			fillPath.lineTo(uRx, uRy);
+			fillPath.lineTo(uLx, uLy);
+			fillPath.close();
+			fillPaint.setColor(stripColors[n]);
+			canvas.drawPath(fillPath, fillPaint);
+		}
 	}
 
 	public void drawLine(int j, int k, int l, int i1) {

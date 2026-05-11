@@ -35,6 +35,13 @@ public class Level {
 	private int m_wheelAvgY;
 	private int m_rI_neon;
 
+	// Strip-fill gradient colors for perspective-mode fill, pre-computed
+	// once per frame in _aiIV when fill mode == MAP_FILL_MODE_GRADIENT and
+	// reused across every segment. N=6 matches the across-tick subdivision
+	// in drawAcrossGradient. Allocated once, never reallocated — keeps the
+	// render hot path GC-free.
+	private final int[] stripColors = new int[6];
+
 	public Level() {
 		m_aI = 0;
 		m_dI = 0;
@@ -208,6 +215,27 @@ public class Level {
 				break;
 		}
 
+		// Perspective-mode area-fill state. Read once per frame; used in
+		// the per-segment loop below. Default behavior (fill OFF, ticks ON)
+		// reproduces the wireframe render exactly — no visual diff on
+		// upgrade for existing users.
+		int fillMode = getLevelLoader().getMapFillMode();
+		boolean ticksEnabled = getLevelLoader().isAcrossTicksEnabled();
+		int fillSolidColor;
+		switch (fillMode) {
+			case Settings.MAP_FILL_MODE_FG:    fillSolidColor = fgColor; break;
+			case Settings.MAP_FILL_MODE_BG:    fillSolidColor = bgColor; break;
+			case Settings.MAP_FILL_MODE_THIRD: fillSolidColor = Settings.getTrackFillArgb(trackMode); break;
+			default:                           fillSolidColor = 0; break;
+		}
+		if (fillMode == Settings.MAP_FILL_MODE_GRADIENT) {
+			// Same N=6 subdivision and sample positions (2n+1)/2N as
+			// drawAcrossGradient — keeps strip-fill bands aligned with the
+			// across-tick gradient when both are visible.
+			for (int n = 0; n < 6; n++)
+				stripColors[n] = interpArgb(fgColor, bgColor, 2 * n + 1, 12);
+		}
+
 		int k2 = 0;
 		int l2 = 0;
 		int j2;
@@ -229,13 +257,29 @@ public class Level {
 			int l3 = Physics._doIII(i3, j3);
 			i3 = (int) (((long) i3 << 32) / (long) (l3 >> 1 >> 1) >> 16);
 			j3 = (int) (((long) j3 << 32) / (long) (l3 >> 1 >> 1) >> 16);
+			// Area fill goes first so the contour/raised line strokes
+			// overlay it cleanly. Quad corners: A,B on ground curve,
+			// D,C on raised projection (D above A, C above B).
+			//   A = points[j2]                 D = A + (j1, l1)
+			//   B = points[j2 + 1]             C = B + (i3, j3)
+			if (fillMode != Settings.MAP_FILL_MODE_OFF) {
+				int ax = points[j2][0],     ay = points[j2][1];
+				int bx = points[j2 + 1][0], by = points[j2 + 1][1];
+				int cx = bx + i3,           cy = by + j3;
+				int dx = ax + j1,           dy = ay + l1;
+				if (fillMode == Settings.MAP_FILL_MODE_GRADIENT)
+					view.fillTrackQuadGradient(ax, ay, bx, by, cx, cy, dx, dy, stripColors);
+				else
+					view.fillTrackQuadSolid(ax, ay, bx, by, cx, cy, dx, dy, fillSolidColor);
+			}
 			// Foreground contour: line between actual ground points
 			// (lower / front line visually).
 			view.setRawArgb(fgColor);
 			view._aIIIV((points[j2][0] << 3) >> 16, (points[j2][1] << 3) >> 16, (points[j2 + 1][0] << 3) >> 16, (points[j2 + 1][1] << 3) >> 16);
 			// Across tick from ground (fg) up to raised (bg). When Off
 			// collapses bg onto fg this degenerates to a solid fg tick.
-			drawAcrossGradient(view, points[j2][0], points[j2][1], j1, l1, fgColor, bgColor);
+			if (ticksEnabled)
+				drawAcrossGradient(view, points[j2][0], points[j2][1], j1, l1, fgColor, bgColor);
 			// Background raised line (upper / back line visually).
 			view.setRawArgb(bgColor);
 			view._aIIIV((points[j2][0] + j1 << 3) >> 16, (points[j2][1] + l1 << 3) >> 16, (points[j2 + 1][0] + i3 << 3) >> 16, (points[j2 + 1][1] + j3 << 3) >> 16);
@@ -261,7 +305,8 @@ public class Level {
 		int k1 = i3;
 		int i2 = j3;
 		// Trailing across tick at the last point, matching the in-loop ticks.
-		drawAcrossGradient(view, points[pointsCount - 1][0], points[pointsCount - 1][1], k1, i2, fgColor, bgColor);
+		if (ticksEnabled)
+			drawAcrossGradient(view, points[pointsCount - 1][0], points[pointsCount - 1][1], k1, i2, fgColor, bgColor);
 		if (getLevelLoader().isShadowsEnabled())
 			_ifiIV(view, k2, l2);
 	}

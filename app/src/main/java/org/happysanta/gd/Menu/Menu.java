@@ -77,6 +77,8 @@ public class Menu
 	private OptionsMenuElement shadowModeOptionItem;
 	private OptionsMenuElement trackColorOptionItem;
 	private OptionsMenuElement mapColorGradientOptionItem;
+	private OptionsMenuElement mapFillModeOptionItem;
+	private OptionsMenuElement mapAcrossTicksOptionItem;
 	private OptionsMenuElement neonColorOptionItem;
 	private ColorsMenuScreen colorsScreen;
 	private MenuScreen trackCopyChooserScreen;
@@ -167,6 +169,7 @@ public class Menu
 	private String[] shadowModeStrings = null;
 	private String[] trackColorStrings = null;
 	private String[] mapColorGradientStrings = null;
+	private String[] mapFillModeStrings = null;
 	private String[] neonColorStrings = null;
 	private String[] customSlotStrings = null;
 	// private EmptyLineMenuElement emptyLine;
@@ -216,6 +219,7 @@ public class Menu
 				shadowModeStrings = getStringArray(R.array.shadow_mode_options);
 				trackColorStrings = getStringArray(R.array.track_color_options);
 				mapColorGradientStrings = getStringArray(R.array.map_color_gradient_options);
+			mapFillModeStrings = getStringArray(R.array.map_fill_mode_options);
 				neonColorStrings = getStringArray(R.array.neon_color_options);
 				customSlotStrings = getStringArray(R.array.custom_slot_options);
 				difficultyLevels = getStringArray(R.array.difficulty);
@@ -346,6 +350,8 @@ public class Menu
 				getLevelLoader().setNeonColor(Settings.getNeonColor());
 				getLevelLoader().setTrackColorMode(Settings.getTrackColorMode());
 				getLevelLoader().setMapColorGradient(Settings.getMapColorGradient());
+				getLevelLoader().setMapFillMode(Settings.getMapFillMode());
+				getLevelLoader().setAcrossTicksEnabled(Settings.isAcrossTicksEnabled());
 				activity.physEngine._ifZV(Settings.isLookAheadEnabled());
 				getGDView().setInputOption(Settings.getInputOption());
 				// getGDView()._aZV(m_aTB == 0);
@@ -433,6 +439,10 @@ public class Menu
 				shadowModeOptionItem = new OptionsMenuElement(getString(R.string.shadows), Settings.getShadowMode(), this, shadowModeStrings, false, optionsMenu);
 				trackColorOptionItem = new OptionsMenuElement(getString(R.string.track_color), Settings.getTrackColorMode(), this, trackColorStrings, false, colorsScreen);
 				mapColorGradientOptionItem = new OptionsMenuElement(getString(R.string.map_color_gradient), Settings.getMapColorGradient(), this, mapColorGradientStrings, false, colorsScreen);
+				mapFillModeOptionItem = new OptionsMenuElement(getString(R.string.map_fill_mode), Settings.getMapFillMode(), this, mapFillModeStrings, false, colorsScreen);
+				// Across ticks: 0=On, 1=Off — matches the perspectiveOptionItem
+				// convention (a boolean rendered through the onOffStrings array).
+				mapAcrossTicksOptionItem = new OptionsMenuElement(getString(R.string.map_across_ticks), Settings.isAcrossTicksEnabled() ? 0 : 1, this, onOffStrings, true, colorsScreen);
 				neonColorOptionItem = new OptionsMenuElement(getString(R.string.neon_color), Settings.getNeonColor(), this, neonColorStrings, false, colorsScreen);
 				driverSpriteOptionItem = new OptionsMenuElement(getString(R.string.driver_sprite), Settings.isDriverSpriteEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				bikeSpriteOptionItem = new OptionsMenuElement(getString(R.string.bike_sprite), Settings.isBikeSpriteEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
@@ -668,13 +678,22 @@ public class Menu
 	// point — we only add them to colorsScreen here.
 	private void buildColorsSubmenu() {
 		// Track FG channel rows (FG R / G / B).
-		ChannelMenuElement trackFgR = makeTrackChannelRow(getString(R.string.track_fg_r), false, 0);
-		ChannelMenuElement trackFgG = makeTrackChannelRow(getString(R.string.track_fg_g), false, 1);
-		ChannelMenuElement trackFgB = makeTrackChannelRow(getString(R.string.track_fg_b), false, 2);
+		ChannelMenuElement trackFgR = makeTrackChannelRow(getString(R.string.track_fg_r), Settings.TRACK_CUSTOM_KIND_FG, 0);
+		ChannelMenuElement trackFgG = makeTrackChannelRow(getString(R.string.track_fg_g), Settings.TRACK_CUSTOM_KIND_FG, 1);
+		ChannelMenuElement trackFgB = makeTrackChannelRow(getString(R.string.track_fg_b), Settings.TRACK_CUSTOM_KIND_FG, 2);
 		// Track BG channel rows (BG R / G / B).
-		ChannelMenuElement trackBgR = makeTrackChannelRow(getString(R.string.track_bg_r), true, 0);
-		ChannelMenuElement trackBgG = makeTrackChannelRow(getString(R.string.track_bg_g), true, 1);
-		ChannelMenuElement trackBgB = makeTrackChannelRow(getString(R.string.track_bg_b), true, 2);
+		ChannelMenuElement trackBgR = makeTrackChannelRow(getString(R.string.track_bg_r), Settings.TRACK_CUSTOM_KIND_BG, 0);
+		ChannelMenuElement trackBgG = makeTrackChannelRow(getString(R.string.track_bg_g), Settings.TRACK_CUSTOM_KIND_BG, 1);
+		ChannelMenuElement trackBgB = makeTrackChannelRow(getString(R.string.track_bg_b), Settings.TRACK_CUSTOM_KIND_BG, 2);
+		// Track FILL channel rows (FILL R / G / B) — the third color used
+		// when MAP_FILL_MODE_THIRD is active. Only meaningful when the
+		// user has picked the "Third" fill mode; otherwise the values
+		// are stored but unused. Same edit flow as FG/BG: editable on
+		// Custom slots, read-only on built-ins (clicking triggers the
+		// copy-into-Custom chooser).
+		ChannelMenuElement trackFillR = makeTrackChannelRow(getString(R.string.track_fill_r), Settings.TRACK_CUSTOM_KIND_FILL, 0);
+		ChannelMenuElement trackFillG = makeTrackChannelRow(getString(R.string.track_fill_g), Settings.TRACK_CUSTOM_KIND_FILL, 1);
+		ChannelMenuElement trackFillB = makeTrackChannelRow(getString(R.string.track_fill_b), Settings.TRACK_CUSTOM_KIND_FILL, 2);
 		// Neon channel rows (R / G / B).
 		ChannelMenuElement neonR = makeNeonChannelRow(getString(R.string.neon_r), 0);
 		ChannelMenuElement neonG = makeNeonChannelRow(getString(R.string.neon_g), 1);
@@ -686,6 +705,9 @@ public class Menu
 		colorsScreen.registerTrackRow(trackBgR);
 		colorsScreen.registerTrackRow(trackBgG);
 		colorsScreen.registerTrackRow(trackBgB);
+		colorsScreen.registerTrackRow(trackFillR);
+		colorsScreen.registerTrackRow(trackFillG);
+		colorsScreen.registerTrackRow(trackFillB);
 		colorsScreen.registerNeonRow(neonR);
 		colorsScreen.registerNeonRow(neonG);
 		colorsScreen.registerNeonRow(neonB);
@@ -694,12 +716,17 @@ public class Menu
 		// groups; matches the visual rhythm of the existing Options screen.
 		colorsScreen.addItem(trackColorOptionItem);
 		colorsScreen.addItem(mapColorGradientOptionItem);
+		colorsScreen.addItem(mapFillModeOptionItem);
+		colorsScreen.addItem(mapAcrossTicksOptionItem);
 		colorsScreen.addItem(trackFgR);
 		colorsScreen.addItem(trackFgG);
 		colorsScreen.addItem(trackFgB);
 		colorsScreen.addItem(trackBgR);
 		colorsScreen.addItem(trackBgG);
 		colorsScreen.addItem(trackBgB);
+		colorsScreen.addItem(trackFillR);
+		colorsScreen.addItem(trackFillG);
+		colorsScreen.addItem(trackFillB);
 		colorsScreen.addItem(copyTrackPresetItem);
 		colorsScreen.addItem(createEmptyLine(false));
 		colorsScreen.addItem(neonColorOptionItem);
@@ -734,12 +761,13 @@ public class Menu
 	}
 
 	// Build a ChannelMenuElement bound to one R/G/B channel of one of
-	// the three Custom track slots' FG or BG color. The active slot is
-	// resolved at click time from Settings.getTrackColorMode() — if the
-	// current preset is a built-in, ChannelTarget.isCurrentPresetCustom()
+	// the three Custom track slots' FG, BG, or FILL color (kind =
+	// Settings.TRACK_CUSTOM_KIND_*). The active slot is resolved at
+	// click time from Settings.getTrackColorMode() — if the current
+	// preset is a built-in, ChannelTarget.isCurrentPresetCustom()
 	// returns false and enterCopyFlow() takes the user to the chooser
 	// instead of entering edit mode.
-	private ChannelMenuElement makeTrackChannelRow(String label, final boolean isBackground, final int channel) {
+	private ChannelMenuElement makeTrackChannelRow(String label, final int kind, final int channel) {
 		final ChannelMenuElement.ChannelTarget target = new ChannelMenuElement.ChannelTarget() {
 			@Override
 			public int getValue() {
@@ -749,19 +777,22 @@ public class Menu
 					// Built-in preset: surface the read-only ARGB for display
 					// (the row never enters edit mode for these; the value is
 					// just shown so the user can see what they'd copy).
-					int argb = isBackground
-							? Settings.getTrackBackgroundArgb(mode)
-							: Settings.getTrackForegroundArgb(mode);
+					int argb;
+					switch (kind) {
+						case Settings.TRACK_CUSTOM_KIND_BG:   argb = Settings.getTrackBackgroundArgb(mode); break;
+						case Settings.TRACK_CUSTOM_KIND_FILL: argb = Settings.getTrackFillArgb(mode);       break;
+						default:                              argb = Settings.getTrackForegroundArgb(mode); break;
+					}
 					return (argb >> (16 - channel * 8)) & 0xff;
 				}
-				return Settings.getTrackCustomChannel(slot, isBackground, channel);
+				return Settings.getTrackCustomChannel(slot, kind, channel);
 			}
 
 			@Override
 			public void setValue(int clamped) {
 				int slot = Settings.getTrackCustomSlotIndex(Settings.getTrackColorMode());
 				if (slot < 0) return; // built-in — should not have entered edit
-				Settings.setTrackCustomChannel(slot, isBackground, channel, clamped);
+				Settings.setTrackCustomChannel(slot, kind, channel, clamped);
 			}
 
 			@Override
@@ -1586,6 +1617,30 @@ public class Menu
 			int mode = mapColorGradientOptionItem.getSelectedOption();
 			getLevelLoader().setMapColorGradient(mode);
 			Settings.setMapColorGradient(mode);
+			return;
+		}
+		if (item == mapFillModeOptionItem) {
+			// 5-state cycle: Off / Foreground / Background / Third / Gradient.
+			// Same advance pattern as mapColorGradientOptionItem above.
+			if (mapFillModeOptionItem._charvZ()) {
+				mapFillModeOptionItem.setSelectedOption(
+						mapFillModeOptionItem.getSelectedOption() + 1);
+			}
+			int mode = mapFillModeOptionItem.getSelectedOption();
+			getLevelLoader().setMapFillMode(mode);
+			Settings.setMapFillMode(mode);
+			return;
+		}
+		if (item == mapAcrossTicksOptionItem) {
+			// 2-state cycle (On=0 / Off=1) — boolean rendered through
+			// onOffStrings, mirrors perspectiveOptionItem's shape.
+			if (mapAcrossTicksOptionItem._charvZ()) {
+				mapAcrossTicksOptionItem.setSelectedOption(
+						mapAcrossTicksOptionItem.getSelectedOption() + 1);
+			}
+			boolean enabled = mapAcrossTicksOptionItem.getSelectedOption() == 0;
+			getLevelLoader().setAcrossTicksEnabled(enabled);
+			Settings.setAcrossTicksEnabled(enabled);
 			return;
 		}
 		if (item == neonColorOptionItem) {

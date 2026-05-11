@@ -52,6 +52,14 @@ public class Loader {
 	// render is single-color in FG. ON keeps the canonical two-color 3-line
 	// render. INVERTED swaps FG/BG.
 	private int mapColorGradient = org.happysanta.gd.Settings.MAP_COLOR_GRADIENT_OFF;
+	// One of Settings.MAP_FILL_MODE_*. OFF preserves the wireframe (no
+	// fill between the FG and BG curves). FG/BG/THIRD paint the area
+	// with a solid color; GRADIENT fills with the strip-fill fg→bg
+	// ramp. Defaults to OFF — visual parity with upstream.
+	private int mapFillMode = org.happysanta.gd.Settings.MAP_FILL_MODE_OFF;
+	// Independent toggle for the across-tick ribs. Defaults to true so
+	// the existing wireframe look is unchanged on first run.
+	private boolean acrossTicksEnabled = true;
 	private int pointers[][] = new int[3][];
 	private int m_eaI = 0;
 	private int m_faI = 0;
@@ -397,6 +405,22 @@ public class Loader {
 
 	public void setMapColorGradient(int mode) {
 		mapColorGradient = mode;
+	}
+
+	public int getMapFillMode() {
+		return mapFillMode;
+	}
+
+	public void setMapFillMode(int mode) {
+		mapFillMode = mode;
+	}
+
+	public boolean isAcrossTicksEnabled() {
+		return acrossTicksEnabled;
+	}
+
+	public void setAcrossTicksEnabled(boolean enabled) {
+		acrossTicksEnabled = enabled;
 	}
 
 	public boolean isPerspectiveEnabled() {

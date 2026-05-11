@@ -47,6 +47,8 @@
 	<string name="colors">Colors</string>
 	<string name="track_color">Track color</string>
 	<string name="map_color_gradient">Map color gradient</string>
+	<string name="map_fill_mode">Map fill</string>
+	<string name="map_across_ticks">Across ticks</string>
 	<string name="neon_color">Neon color</string>
 	<!-- Track FG/BG channel row labels. Shown as e.g. "FG R: 255" on the
 	     Colors submenu. -->
@@ -56,6 +58,11 @@
 	<string name="track_bg_r">BG R</string>
 	<string name="track_bg_g">BG G</string>
 	<string name="track_bg_b">BG B</string>
+	<!-- Third (fill) color channels — only relevant when Map fill = Third
+	     and the active track preset is one of the editable Custom slots. -->
+	<string name="track_fill_r">Fill R</string>
+	<string name="track_fill_g">Fill G</string>
+	<string name="track_fill_b">Fill B</string>
 	<!-- Neon channel row labels (single R/G/B — neon has no FG/BG pair). -->
 	<string name="neon_r">R</string>
 	<string name="neon_g">G</string>
@@ -270,6 +277,21 @@
 		<item>Solid</item>
 		<item>Gradient</item>
 		<item>Reversed</item>
+	</string-array>
+
+	<!-- Order must match Settings.MAP_FILL_MODE_* constants
+	     (OFF / FG / BG / THIRD / GRADIENT). Fills the area between the
+	     ground and raised curves in perspective mode. Off = wireframe
+	     (default, preserves upstream visual). Foreground / Background
+	     use the matching track color. Third uses a curated per-preset
+	     color (editable for Custom slots). Gradient strip-fills
+	     foreground→background matching the across-tick interpolation. -->
+	<string-array name="map_fill_mode_options">
+		<item>Off</item>
+		<item>Foreground</item>
+		<item>Background</item>
+		<item>Third</item>
+		<item>Gradient</item>
 	</string-array>
 
 	<string-array name="keyset">
