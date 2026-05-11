@@ -185,12 +185,15 @@ Gameplay visuals
   R/G/B for Custom slots) / Gradient (foreground→background strip-fill
   matching the across-tick interpolation direction). Implemented as an
   allocation-free path render in GameView (reused Path / Paint; gradient
-  uses 6 trapezoidal strips with colors pre-interpolated via the same
+  uses N trapezoidal strips with colors pre-interpolated via the same
   interpArgb path the across ticks already use, so no shader and no
-  per-frame allocation in the hot path). Independently, the across-tick
-  ribs are now togglable via a new "Across ticks" option (On default,
-  preserves upstream visual) so the user can pick wireframe / fill only /
-  ribbed-over-fill combinations.
+  per-frame allocation in the hot path). N is exposed as a "Gradient
+  steps" option (2/3/4/6/8/12, default 6) and drives the across-tick
+  rib subdivision count too so the rib's color steps stay aligned with
+  the strip boundaries regardless of setting. Independently, the
+  across-tick ribs are togglable via a new "Across ticks" option (On
+  default, preserves upstream visual) so the user can pick wireframe /
+  fill only / ribbed-over-fill combinations.
 
 - Map color gradient option added (Solid / Gradient / Reversed) —
   applies to every preset including Original. Solid ignores the

@@ -44,9 +44,39 @@ public class GameView extends View {
 	// existing field). No `new` in the per-segment hot path. AA is
 	// deliberately off — the surrounding line render also draws without
 	// AA, and matching that keeps fill edges crisp against the strokes.
+	//
+	// Skia call batching: the per-segment fill helpers no longer issue
+	// drawPath; instead they accumulate sub-paths into these reused
+	// Paths and a single drawPath per color is dispatched in
+	// endTrackFill at the end of pass 2 in Level._aiIV. For N visible
+	// segments this collapses N drawPath calls (solid mode) or 6×N
+	// drawPath calls (gradient mode) down to 1 and 6 respectively —
+	// payoff is on the JNI / Canvas boundary, not in rasterization.
+	// fillPath holds the solid batch; gradientStripPaths[n] holds the
+	// n-th strip color's batch. Strip-path array length matches the user-
+	// configured Gradient steps (2/3/4/6/8/12); lazily grown by
+	// beginTrackFill when the setting is changed at runtime.
+	//
+	// Each quad ABCD is decomposed into two triangles (ABC and ACD)
+	// before being appended — triangles can't self-intersect (only 3
+	// vertices) so bowtie quads on steep humps still rasterize cleanly,
+	// and a per-triangle signed-area check (see appendTriangle) flips
+	// vertex order when needed so every sub-path in the Path winds in
+	// the same direction. Combined with the explicit WINDING fill type
+	// set below, overlapping triangles sum to winding ≥ 1 → filled,
+	// never cancel to 0 → holes. This is what makes batching safe; the
+	// previous "append the raw quad" version punched holes through
+	// the track on humps because opposite-wound sub-paths cancelled.
 	private final Path fillPath = new Path();
+	private Path[] gradientStripPaths = new Path[0];
 	private final Paint fillPaint = new Paint();
-	{ fillPaint.setStyle(Paint.Style.FILL); /* AA stays off — seams handled by strip overlap, see fillTrackQuadGradient */ }
+	{
+		fillPaint.setStyle(Paint.Style.FILL); /* AA stays off — seams handled by strip overlap, see fillTrackQuadGradient */
+		// FillType is persistent across rewind(), so setting it once at
+		// construction is enough. Default would already be WINDING; pin it
+		// explicitly because the whole batching scheme depends on it.
+		fillPath.setFillType(Path.FillType.WINDING);
+	}
 	private int m_XI;
 	private int m_BI;
 	private Physics physEngine;
@@ -587,39 +617,132 @@ public class GameView extends View {
 		canvas.drawLine(offsetX(j), offsetY(k), offsetX(l), offsetY(i1), paint);
 	}
 
-	// Fill one perspective-mode track segment quadrilateral with a
-	// solid color. The quad is ABCD with A,B on the ground curve and
-	// D,C on the raised projection. Same (coord << 3) >> 16 shift the
-	// line render uses so the fill aligns pixel-exactly with the
-	// strokes drawn over it.
+	// Begin a perspective-mode fill frame. Rewinds the per-color Paths
+	// the per-segment helpers append into. Caller is Level.drawSegment
+	// (per-segment) — must be paired with endTrackFill in the same
+	// segment. Cheap (rewind preserves the underlying vertex buffer).
+	// Lazily grows the strip-path array when gradN exceeds current
+	// capacity (user changed the Gradient steps setting to a larger N).
+	public void beginTrackFill(int fillMode, int gradN) {
+		if (fillMode == Settings.MAP_FILL_MODE_OFF)
+			return;
+		if (fillMode == Settings.MAP_FILL_MODE_GRADIENT) {
+			if (gradientStripPaths.length < gradN) {
+				Path[] grown = new Path[gradN];
+				System.arraycopy(gradientStripPaths, 0, grown, 0, gradientStripPaths.length);
+				for (int i = gradientStripPaths.length; i < gradN; i++) {
+					Path p = new Path();
+					p.setFillType(Path.FillType.WINDING);
+					grown[i] = p;
+				}
+				gradientStripPaths = grown;
+			}
+			for (int n = 0; n < gradN; n++) gradientStripPaths[n].rewind();
+		} else {
+			fillPath.rewind();
+		}
+	}
+
+	// Flush the segment's accumulated fills. Solid modes (FG / BG /
+	// THIRD): 1 drawPath for the segment quad. Gradient mode: gradN
+	// drawPath calls (one per strip color), drawn strip 0 → strip
+	// gradN-1 so the higher-strip color wins where adjacent strips
+	// overlap by the seam-closing overdraw added in fillTrackQuadGradient.
+	public void endTrackFill(int fillMode, int fillSolidColor, int[] stripColors, int gradN) {
+		if (fillMode == Settings.MAP_FILL_MODE_OFF)
+			return;
+		if (fillMode == Settings.MAP_FILL_MODE_GRADIENT) {
+			for (int n = 0; n < gradN; n++) {
+				fillPaint.setColor(stripColors[n]);
+				canvas.drawPath(gradientStripPaths[n], fillPaint);
+			}
+		} else {
+			fillPaint.setColor(fillSolidColor);
+			canvas.drawPath(fillPath, fillPaint);
+		}
+	}
+
+	// Append one perspective-mode track segment quadrilateral to the
+	// solid-fill batch. The quad is ABCD with A,B on the ground curve
+	// and D,C on the raised projection. Same (coord << 3) >> 16 shift
+	// the line render uses so the fill aligns pixel-exactly with the
+	// strokes drawn over it. No drawPath here — the whole batch is
+	// flushed by endTrackFill.
+	//
+	// Decomposed into two triangles (ABC + ACD) — see class-level
+	// comment on fillPath for why. The per-triangle winding fixup in
+	// appendTriangle is what keeps the batch hole-free on humps.
+	//
+	// Each segment is inflated along the A→B / D→C track direction by
+	// ~1 pixel on each side so adjacent segments overlap at their
+	// shared across edge. The painter-z order of segments overpaints
+	// the overlap on whichever side ends up last → no sub-pixel sky
+	// seam at the cross-tick line. Same rationale as the along-track
+	// overlap in fillTrackQuadGradient; needed independently here
+	// because each segment in solid mode is now per-segment-flushed
+	// (since the painter-z fix), no longer one giant Path.
 	public void fillTrackQuadSolid(int ax, int ay, int bx, int by,
-								   int cx, int cy, int dx, int dy, int color) {
+								   int cx, int cy, int dx, int dy) {
 		float aX = offsetX((ax << 3) >> 16), aY = offsetY((ay << 3) >> 16);
 		float bX = offsetX((bx << 3) >> 16), bY = offsetY((by << 3) >> 16);
 		float cX = offsetX((cx << 3) >> 16), cY = offsetY((cy << 3) >> 16);
 		float dX = offsetX((dx << 3) >> 16), dY = offsetY((dy << 3) >> 16);
 
-		fillPath.rewind();
-		fillPath.moveTo(aX, aY);
-		fillPath.lineTo(bX, bY);
-		fillPath.lineTo(cX, cY);
-		fillPath.lineTo(dX, dY);
-		fillPath.close();
-		fillPaint.setColor(color);
-		canvas.drawPath(fillPath, fillPaint);
+		final float OVERLAP_PX = 1.0f;
+		float abLx = bX - aX, abLy = bY - aY;
+		float abUx = cX - dX, abUy = cY - dY;
+		float abLLen = (float) Math.hypot(abLx, abLy);
+		float abULen = (float) Math.hypot(abUx, abUy);
+		float epsAlongL = abLLen > 0f ? OVERLAP_PX / abLLen : 0f;
+		float epsAlongU = abULen > 0f ? OVERLAP_PX / abULen : 0f;
+		float aXn = aX - epsAlongL * abLx, aYn = aY - epsAlongL * abLy;
+		float bXn = bX + epsAlongL * abLx, bYn = bY + epsAlongL * abLy;
+		float cXn = cX + epsAlongU * abUx, cYn = cY + epsAlongU * abUy;
+		float dXn = dX - epsAlongU * abUx, dYn = dY - epsAlongU * abUy;
+
+		appendTriangle(fillPath, aXn, aYn, bXn, bYn, cXn, cYn);
+		appendTriangle(fillPath, aXn, aYn, cXn, cYn, dXn, dYn);
 	}
 
-	// Fill one perspective-mode track segment quadrilateral with a
-	// strip-fill gradient. The quad ABCD is sliced into N=6 trapezoidal
-	// bands parallel to the ground edge AB and the raised edge DC; each
-	// band is painted with a single interpolated color from stripColors,
-	// pre-computed once per frame by Level._aiIV via interpArgb. No
-	// shader, no per-call allocation — see CLAUDE.md (gravitydefied)
-	// performance notes in plans-perspective-fill.md.
+	// Append one triangle to a Path as a closed 3-vertex sub-path, with
+	// vertex order normalized to a single consistent winding direction.
+	// The sign of the (×2) signed area picks which way the input is
+	// already wound; we flip the last two vertices when needed so every
+	// triangle in the host Path winds the same way. Under the WINDING
+	// fill rule this means overlapping triangles' winding numbers sum
+	// to ≥ 1 inside the union (filled) and never cancel to 0 (holes).
+	// Without this fixup, bowtie quads on steep humps decompose into
+	// triangles with opposite orientation and rasterize as a punched-
+	// out band — the "fills not filling all the rectangles / hills
+	// inside out" symptom from the unbatched-quad version.
+	private static void appendTriangle(Path p,
+									   float x0, float y0,
+									   float x1, float y1,
+									   float x2, float y2) {
+		float cross = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
+		p.moveTo(x0, y0);
+		if (cross >= 0f) {
+			p.lineTo(x1, y1);
+			p.lineTo(x2, y2);
+		} else {
+			p.lineTo(x2, y2);
+			p.lineTo(x1, y1);
+		}
+		p.close();
+	}
+
+	// Append one perspective-mode track segment quadrilateral to the
+	// gradient-fill batch. The quad ABCD is sliced into N=gradN
+	// trapezoidal bands parallel to the ground edge AB and the raised
+	// edge DC; each band's sub-path goes into gradientStripPaths[n],
+	// which gets painted in one drawPath call by endTrackFill with the
+	// matching color from stripColors (pre-computed once per frame by
+	// Level._aiIV via interpArgb). gradN is the user-configurable
+	// Gradient steps setting (2/3/4/6/8/12).
 	public void fillTrackQuadGradient(int ax, int ay, int bx, int by,
 									  int cx, int cy, int dx, int dy,
-									  int[] stripColors) {
-		final int N = 6;
+									  int[] stripColors, int gradN) {
+		final int N = gradN;
 		float aX = offsetX((ax << 3) >> 16), aY = offsetY((ay << 3) >> 16);
 		float bX = offsetX((bx << 3) >> 16), bY = offsetY((by << 3) >> 16);
 		float cX = offsetX((cx << 3) >> 16), cY = offsetY((cy << 3) >> 16);
@@ -630,23 +753,52 @@ public class GameView extends View {
 		float lDx = dX - aX, lDy = dY - aY;
 		float rDx = cX - bX, rDy = cY - bY;
 
-		// Each strip's upper edge is extended by ~1 pixel in screen space
-		// so adjacent strips overlap along their shared boundary. The next
-		// strip is drawn after (and starts at the exact nominal boundary),
-		// so its color overwrites the overlap region cleanly — no visible
-		// boundary shift, but the boundary pixel is always covered by at
-		// least one strip. Closes the rasterization seam that the per-
-		// polygon top-left fill rule leaves at sub-pixel coordinates with
-		// AA off. ε is computed in t-space from the shorter ground→raised
-		// edge length so the pixel overlap stays consistent regardless of
-		// segment size (near camera vs. far). The last strip's overshoot
-		// (t1 > 1) sits past the raised line, which is drawn over the fill
-		// afterwards in Level._aiIV, so it's hidden.
+		// Each strip is inflated by ~OVERLAP_PX in screen space along
+		// every direction it borders an adjacent fill region, so that
+		// rasterization sub-pixel slop at boundaries never lets sky
+		// color leak through:
+		//
+		//   - Across direction (between strip n and strip n+1 in the
+		//     same segment): each strip's upper edge extends past the
+		//     nominal boundary by epsT (in t-space along A→D / B→C).
+		//     The next strip starts at the nominal boundary, so its
+		//     color overwrites the overhang — no visible boundary
+		//     shift, but the boundary pixel is always covered.
+		//   - Along-track direction (between adjacent segments): each
+		//     strip's left edge extends past A→D by epsAlong toward
+		//     the previous segment (in the −A→B / −D→C direction) and
+		//     the right edge extends past B→C toward the next segment
+		//     in the +A→B / +D→C direction. Adjacent segments share
+		//     coordinates exactly on their common across edge, but
+		//     the top-left fill rule plus floating-point coord math
+		//     could otherwise leave a sub-pixel seam right where the
+		//     across-tick rib is drawn — the user-visible "sky shows
+		//     through at the cross-ticks" artifact. Both sides extend,
+		//     so the painter-z order of segments doesn't matter; the
+		//     last-painted segment wins the seam pixel.
+		//
+		// ε for the across overlap uses the shorter ground→raised edge
+		// length so the screen-space overlap stays ≥ OVERLAP_PX on
+		// both edges. Likewise for the along-track overlap, computed
+		// independently per upper/lower edge. The outermost strip's
+		// overshoots (t1 > 1, and the segment-edge extensions) sit
+		// behind the BG/FG line strokes which paint last in the per-
+		// segment overlay step, so they're hidden.
 		final float OVERLAP_PX = 1.0f;
 		float lLen = (float) Math.hypot(lDx, lDy);
 		float rLen = (float) Math.hypot(rDx, rDy);
 		float edgeLen = lLen < rLen ? lLen : rLen;
 		float epsT = edgeLen > 0f ? OVERLAP_PX / edgeLen : 0f;
+
+		// Along-track vectors (A→B for the lower edge, D→C for the
+		// upper edge). Used to nudge each strip's left/right corners
+		// slightly past the segment boundary.
+		float abLx = bX - aX, abLy = bY - aY;
+		float abUx = cX - dX, abUy = cY - dY;
+		float abLLen = (float) Math.hypot(abLx, abLy);
+		float abULen = (float) Math.hypot(abUx, abUy);
+		float epsAlongL = abLLen > 0f ? OVERLAP_PX / abLLen : 0f;
+		float epsAlongU = abULen > 0f ? OVERLAP_PX / abULen : 0f;
 
 		for (int n = 0; n < N; n++) {
 			float t0 = (float) n / N;
@@ -657,14 +809,21 @@ public class GameView extends View {
 			float uLx = aX + t1 * lDx, uLy = aY + t1 * lDy; // left  upper
 			float uRx = bX + t1 * rDx, uRy = bY + t1 * rDy; // right upper
 
-			fillPath.rewind();
-			fillPath.moveTo(lLx, lLy);
-			fillPath.lineTo(lRx, lRy);
-			fillPath.lineTo(uRx, uRy);
-			fillPath.lineTo(uLx, uLy);
-			fillPath.close();
-			fillPaint.setColor(stripColors[n]);
-			canvas.drawPath(fillPath, fillPaint);
+			// Along-track extensions: lower corners follow the A→B
+			// direction; upper corners follow the D→C direction. Each
+			// scaled by epsAlong* so it's exactly OVERLAP_PX in screen
+			// space along that edge.
+			lLx -= epsAlongL * abLx; lLy -= epsAlongL * abLy;
+			lRx += epsAlongL * abLx; lRy += epsAlongL * abLy;
+			uLx -= epsAlongU * abUx; uLy -= epsAlongU * abUy;
+			uRx += epsAlongU * abUx; uRy += epsAlongU * abUy;
+
+			// Strip quad (lL, lR, uR, uL) → two triangles. Same triangle
+			// split + per-triangle winding fixup as the solid path, so
+			// hump overlaps within gradientStripPaths[n] don't cancel.
+			Path p = gradientStripPaths[n];
+			appendTriangle(p, lLx, lLy, lRx, lRy, uRx, uRy);
+			appendTriangle(p, lLx, lLy, uRx, uRy, uLx, uLy);
 		}
 	}
 

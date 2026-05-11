@@ -175,6 +175,18 @@ public class Settings {
 	private static final String MAP_ACROSS_TICKS_ENABLED = "map_across_ticks_enabled";
 	private static final boolean MAP_ACROSS_TICKS_ENABLED_DEFAULT = true;
 
+	// Subdivision count N for the perspective-mode gradient render:
+	// strip-fill bands AND across-tick ribs share this so the two
+	// gradients stay visually aligned (a strip's color sample at
+	// (2n+1)/2N is the same as the tick's color sample at the matching
+	// position). Lower N = chunkier banding / fewer line strokes per
+	// tick; higher N = smoother gradient at slightly more per-frame
+	// rasterization cost. Default 6 preserves the value the strip-fill
+	// and tick render shipped with originally.
+	public static final int[] GRADIENT_STEPS_OPTIONS = { 2, 3, 4, 6, 8, 12 };
+	private static final String GRADIENT_STEPS = "gradient_steps";
+	private static final int GRADIENT_STEPS_DEFAULT = 6;
+
 	// One-time migration when the legacy "Green" preset was removed.
 	// Pre-migration encoding: ORIGINAL=0, GREEN=1, CYAN=2, RED=3, YELLOW=4,
 	// LIME=5, BLUE=6, GRAY=7, BW=8. New encoding drops GREEN and shifts
@@ -562,6 +574,20 @@ public class Settings {
 
 	public static void setAcrossTicksEnabled(boolean enabled) {
 		setBoolean(MAP_ACROSS_TICKS_ENABLED, enabled);
+	}
+
+	public static int getGradientSteps() {
+		int n = preferences.getInt(GRADIENT_STEPS, GRADIENT_STEPS_DEFAULT);
+		// Validate against the allowed option list rather than a range —
+		// arbitrary values would work but would let stale prefs leak in
+		// awkward subdivisions like 5 or 7 that the menu can't represent.
+		for (int allowed : GRADIENT_STEPS_OPTIONS)
+			if (n == allowed) return n;
+		return GRADIENT_STEPS_DEFAULT;
+	}
+
+	public static void setGradientSteps(int n) {
+		setInt(GRADIENT_STEPS, n);
 	}
 
 	// 0xAARRGGBB color for the FOREGROUND line — drawn between actual

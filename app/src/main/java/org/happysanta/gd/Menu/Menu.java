@@ -79,6 +79,7 @@ public class Menu
 	private OptionsMenuElement mapColorGradientOptionItem;
 	private OptionsMenuElement mapFillModeOptionItem;
 	private OptionsMenuElement mapAcrossTicksOptionItem;
+	private OptionsMenuElement gradientStepsOptionItem;
 	private OptionsMenuElement neonColorOptionItem;
 	private ColorsMenuScreen colorsScreen;
 	private MenuScreen trackCopyChooserScreen;
@@ -170,6 +171,7 @@ public class Menu
 	private String[] trackColorStrings = null;
 	private String[] mapColorGradientStrings = null;
 	private String[] mapFillModeStrings = null;
+	private String[] gradientStepsStrings = null;
 	private String[] neonColorStrings = null;
 	private String[] customSlotStrings = null;
 	// private EmptyLineMenuElement emptyLine;
@@ -220,6 +222,7 @@ public class Menu
 				trackColorStrings = getStringArray(R.array.track_color_options);
 				mapColorGradientStrings = getStringArray(R.array.map_color_gradient_options);
 			mapFillModeStrings = getStringArray(R.array.map_fill_mode_options);
+				gradientStepsStrings = getStringArray(R.array.gradient_steps_options);
 				neonColorStrings = getStringArray(R.array.neon_color_options);
 				customSlotStrings = getStringArray(R.array.custom_slot_options);
 				difficultyLevels = getStringArray(R.array.difficulty);
@@ -352,6 +355,7 @@ public class Menu
 				getLevelLoader().setMapColorGradient(Settings.getMapColorGradient());
 				getLevelLoader().setMapFillMode(Settings.getMapFillMode());
 				getLevelLoader().setAcrossTicksEnabled(Settings.isAcrossTicksEnabled());
+				getLevelLoader().setGradientSteps(Settings.getGradientSteps());
 				activity.physEngine._ifZV(Settings.isLookAheadEnabled());
 				getGDView().setInputOption(Settings.getInputOption());
 				// getGDView()._aZV(m_aTB == 0);
@@ -443,6 +447,7 @@ public class Menu
 				// Across ticks: 0=On, 1=Off — matches the perspectiveOptionItem
 				// convention (a boolean rendered through the onOffStrings array).
 				mapAcrossTicksOptionItem = new OptionsMenuElement(getString(R.string.map_across_ticks), Settings.isAcrossTicksEnabled() ? 0 : 1, this, onOffStrings, true, colorsScreen);
+				gradientStepsOptionItem = new OptionsMenuElement(getString(R.string.gradient_steps), gradientStepsIndexFromN(Settings.getGradientSteps()), this, gradientStepsStrings, false, colorsScreen);
 				neonColorOptionItem = new OptionsMenuElement(getString(R.string.neon_color), Settings.getNeonColor(), this, neonColorStrings, false, colorsScreen);
 				driverSpriteOptionItem = new OptionsMenuElement(getString(R.string.driver_sprite), Settings.isDriverSpriteEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				bikeSpriteOptionItem = new OptionsMenuElement(getString(R.string.bike_sprite), Settings.isBikeSpriteEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
@@ -718,6 +723,7 @@ public class Menu
 		colorsScreen.addItem(mapColorGradientOptionItem);
 		colorsScreen.addItem(mapFillModeOptionItem);
 		colorsScreen.addItem(mapAcrossTicksOptionItem);
+		colorsScreen.addItem(gradientStepsOptionItem);
 		colorsScreen.addItem(trackFgR);
 		colorsScreen.addItem(trackFgG);
 		colorsScreen.addItem(trackFgB);
@@ -1643,6 +1649,17 @@ public class Menu
 			Settings.setAcrossTicksEnabled(enabled);
 			return;
 		}
+		if (item == gradientStepsOptionItem) {
+			// 6-state cycle over GRADIENT_STEPS_OPTIONS = {2,3,4,6,8,12}.
+			if (gradientStepsOptionItem._charvZ()) {
+				gradientStepsOptionItem.setSelectedOption(
+						gradientStepsOptionItem.getSelectedOption() + 1);
+			}
+			int n = gradientStepsNFromIndex(gradientStepsOptionItem.getSelectedOption());
+			getLevelLoader().setGradientSteps(n);
+			Settings.setGradientSteps(n);
+			return;
+		}
 		if (item == neonColorOptionItem) {
 			// 9-state cycle (6 built-in hues + 3 Custom slots). On change,
 			// re-pull the 3 neon channel rows so they reflect the newly
@@ -2018,6 +2035,29 @@ public class Menu
 	private static int controllerAutohideSecondsFromIndex(int index) {
 		int[] vals = Settings.CONTROLLER_AUTOHIDE_TIMEOUT_VALUES;
 		if (index < 0 || index >= vals.length) return vals[0];
+		return vals[index];
+	}
+
+	/**
+	 * Map a saved gradient-steps value (one of 2/3/4/6/8/12) back to its
+	 * index in {@link Settings#GRADIENT_STEPS_OPTIONS}. Falls through to
+	 * the index of the default (6) for unknown values so a corrupt or
+	 * future preference doesn't crash the menu.
+	 */
+	private static int gradientStepsIndexFromN(int n) {
+		int[] vals = Settings.GRADIENT_STEPS_OPTIONS;
+		int defaultIdx = 0;
+		for (int i = 0; i < vals.length; i++) {
+			if (vals[i] == n) return i;
+			if (vals[i] == 6) defaultIdx = i;
+		}
+		return defaultIdx;
+	}
+
+	/** Inverse of {@link #gradientStepsIndexFromN(int)}. */
+	private static int gradientStepsNFromIndex(int index) {
+		int[] vals = Settings.GRADIENT_STEPS_OPTIONS;
+		if (index < 0 || index >= vals.length) return 6;
 		return vals[index];
 	}
 

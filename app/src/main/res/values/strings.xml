@@ -49,6 +49,7 @@
 	<string name="map_color_gradient">Map color gradient</string>
 	<string name="map_fill_mode">Map fill</string>
 	<string name="map_across_ticks">Across ticks</string>
+	<string name="gradient_steps">Gradient steps</string>
 	<string name="neon_color">Neon color</string>
 	<!-- Track FG/BG channel row labels. Shown as e.g. "FG R: 255" on the
 	     Colors submenu. -->
@@ -292,6 +293,19 @@
 		<item>Background</item>
 		<item>Third</item>
 		<item>Gradient</item>
+	</string-array>
+
+	<!-- Subdivision count N shared by the perspective-mode strip-fill
+	     gradient and the across-tick rib. Lower N = chunkier bands /
+	     fewer line strokes per tick; higher N = smoother gradient.
+	     Default 6 matches the value both renders shipped with. -->
+	<string-array name="gradient_steps_options">
+		<item>2</item>
+		<item>3</item>
+		<item>4</item>
+		<item>6</item>
+		<item>8</item>
+		<item>12</item>
 	</string-array>
 
 	<string-array name="keyset">

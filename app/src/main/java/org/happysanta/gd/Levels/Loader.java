@@ -60,6 +60,10 @@ public class Loader {
 	// Independent toggle for the across-tick ribs. Defaults to true so
 	// the existing wireframe look is unchanged on first run.
 	private boolean acrossTicksEnabled = true;
+	// Subdivision count N shared by the strip-fill gradient and the
+	// across-tick rib. Defaults to 6 — the value both renders shipped
+	// with originally — so first-run visual matches.
+	private int gradientSteps = 6;
 	private int pointers[][] = new int[3][];
 	private int m_eaI = 0;
 	private int m_faI = 0;
@@ -421,6 +425,14 @@ public class Loader {
 
 	public void setAcrossTicksEnabled(boolean enabled) {
 		acrossTicksEnabled = enabled;
+	}
+
+	public int getGradientSteps() {
+		return gradientSteps;
+	}
+
+	public void setGradientSteps(int n) {
+		gradientSteps = n;
 	}
 
 	public boolean isPerspectiveEnabled() {
