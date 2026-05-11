@@ -46,7 +46,7 @@ public class GameView extends View {
 	// AA, and matching that keeps fill edges crisp against the strokes.
 	private final Path fillPath = new Path();
 	private final Paint fillPaint = new Paint();
-	{ fillPaint.setStyle(Paint.Style.FILL); /* AA stays off — matches the surrounding line render */ }
+	{ fillPaint.setStyle(Paint.Style.FILL); /* AA stays off — seams handled by strip overlap, see fillTrackQuadGradient */ }
 	private int m_XI;
 	private int m_BI;
 	private Physics physEngine;
@@ -626,13 +626,31 @@ public class GameView extends View {
 		float dX = offsetX((dx << 3) >> 16), dY = offsetY((dy << 3) >> 16);
 
 		// Per-edge ground→raised vectors (left edge A→D, right edge B→C).
-		// Strip n covers the slice [n/N .. (n+1)/N] along these edges.
+		// Strip n nominally covers [n/N .. (n+1)/N] along these edges.
 		float lDx = dX - aX, lDy = dY - aY;
 		float rDx = cX - bX, rDy = cY - bY;
 
+		// Each strip's upper edge is extended by ~1 pixel in screen space
+		// so adjacent strips overlap along their shared boundary. The next
+		// strip is drawn after (and starts at the exact nominal boundary),
+		// so its color overwrites the overlap region cleanly — no visible
+		// boundary shift, but the boundary pixel is always covered by at
+		// least one strip. Closes the rasterization seam that the per-
+		// polygon top-left fill rule leaves at sub-pixel coordinates with
+		// AA off. ε is computed in t-space from the shorter ground→raised
+		// edge length so the pixel overlap stays consistent regardless of
+		// segment size (near camera vs. far). The last strip's overshoot
+		// (t1 > 1) sits past the raised line, which is drawn over the fill
+		// afterwards in Level._aiIV, so it's hidden.
+		final float OVERLAP_PX = 1.0f;
+		float lLen = (float) Math.hypot(lDx, lDy);
+		float rLen = (float) Math.hypot(rDx, rDy);
+		float edgeLen = lLen < rLen ? lLen : rLen;
+		float epsT = edgeLen > 0f ? OVERLAP_PX / edgeLen : 0f;
+
 		for (int n = 0; n < N; n++) {
 			float t0 = (float) n / N;
-			float t1 = (float) (n + 1) / N;
+			float t1 = (float) (n + 1) / N + epsT;
 
 			float lLx = aX + t0 * lDx, lLy = aY + t0 * lDy; // left  lower
 			float lRx = bX + t0 * rDx, lRy = bY + t0 * rDy; // right lower

@@ -42,6 +42,16 @@ public class Level {
 	// render hot path GC-free.
 	private final int[] stripColors = new int[6];
 
+	// Per-POINT camera-ray offset cache used by the multi-pass perspective
+	// render in _aiIV. pointOffsetX/Y[j] is the normalized .16 fixed-point
+	// vector from points[j] toward the camera anchor, scaled by 4 — the
+	// raised projection of points[j] is points[j] + (offsetX, offsetY).
+	// Lazy-grown to pointsCount, reused across frames. Lets pass 2 (fills)
+	// walk segments in non-forward z-order without redoing the
+	// normalization math pass 1 already did.
+	private int[] pointOffsetX;
+	private int[] pointOffsetY;
+
 	public Level() {
 		m_aI = 0;
 		m_dI = 0;
@@ -236,79 +246,146 @@ public class Level {
 				stripColors[n] = interpArgb(fgColor, bgColor, 2 * n + 1, 12);
 		}
 
+		// Lazy-grow the per-point camera-offset cache to fit the level.
+		// Reused across frames once allocated — no GC pressure in steady
+		// state.
+		if (pointOffsetX == null || pointOffsetX.length < pointsCount) {
+			pointOffsetX = new int[pointsCount];
+			pointOffsetY = new int[pointsCount];
+		}
+
+		// PASS 1 — scan visible segment range, cache per-point camera-ray
+		// offsets, track the shadow-mask boundaries (k2/l2) and the last
+		// drawn segment index. No rendering yet. Mirrors the bookkeeping
+		// the upstream single-pass loop did inline.
 		int k2 = 0;
 		int l2 = 0;
-		int j2;
-		for (j2 = 0; j2 < pointsCount - 1 && points[j2][0] <= m_aI; j2++) ;
-		if (j2 > 0)
-			j2--;
-		int i3 = k - points[j2][0];
-		int j3 = (i1 + 0x320000) - points[j2][1];
-		int k3 = Physics._doIII(i3, j3);
-		i3 = (int) (((long) i3 << 32) / (long) (k3 >> 1 >> 1) >> 16);
-		j3 = (int) (((long) j3 << 32) / (long) (k3 >> 1 >> 1) >> 16);
+		int firstIdx;
+		for (firstIdx = 0; firstIdx < pointsCount - 1 && points[firstIdx][0] <= m_aI; firstIdx++) ;
+		if (firstIdx > 0)
+			firstIdx--;
+
+		cachePointOffset(firstIdx, k, i1);
+
+		int j2 = firstIdx;
+		int lastIdx = firstIdx;
 		do {
 			if (j2 >= pointsCount - 1)
 				break;
-			int j1 = i3;
-			int l1 = j3;
-			i3 = k - points[j2 + 1][0];
-			j3 = (i1 + 0x320000) - points[j2 + 1][1];
-			int l3 = Physics._doIII(i3, j3);
-			i3 = (int) (((long) i3 << 32) / (long) (l3 >> 1 >> 1) >> 16);
-			j3 = (int) (((long) j3 << 32) / (long) (l3 >> 1 >> 1) >> 16);
-			// Area fill goes first so the contour/raised line strokes
-			// overlay it cleanly. Quad corners: A,B on ground curve,
-			// D,C on raised projection (D above A, C above B).
-			//   A = points[j2]                 D = A + (j1, l1)
-			//   B = points[j2 + 1]             C = B + (i3, j3)
-			if (fillMode != Settings.MAP_FILL_MODE_OFF) {
-				int ax = points[j2][0],     ay = points[j2][1];
-				int bx = points[j2 + 1][0], by = points[j2 + 1][1];
-				int cx = bx + i3,           cy = by + j3;
-				int dx = ax + j1,           dy = ay + l1;
-				if (fillMode == Settings.MAP_FILL_MODE_GRADIENT)
-					view.fillTrackQuadGradient(ax, ay, bx, by, cx, cy, dx, dy, stripColors);
-				else
-					view.fillTrackQuadSolid(ax, ay, bx, by, cx, cy, dx, dy, fillSolidColor);
-			}
-			// Foreground contour: line between actual ground points
-			// (lower / front line visually).
-			view.setRawArgb(fgColor);
-			view._aIIIV((points[j2][0] << 3) >> 16, (points[j2][1] << 3) >> 16, (points[j2 + 1][0] << 3) >> 16, (points[j2 + 1][1] << 3) >> 16);
-			// Across tick from ground (fg) up to raised (bg). When Off
-			// collapses bg onto fg this degenerates to a solid fg tick.
-			if (ticksEnabled)
-				drawAcrossGradient(view, points[j2][0], points[j2][1], j1, l1, fgColor, bgColor);
-			// Background raised line (upper / back line visually).
-			view.setRawArgb(bgColor);
-			view._aIIIV((points[j2][0] + j1 << 3) >> 16, (points[j2][1] + l1 << 3) >> 16, (points[j2 + 1][0] + i3 << 3) >> 16, (points[j2 + 1][1] + j3 << 3) >> 16);
+			cachePointOffset(j2 + 1, k, i1);
 			if (j2 > 1) {
 				if (points[j2][0] > m_eI && k2 == 0)
 					k2 = j2 - 1;
 				if (points[j2][0] > m_bI && l2 == 0)
 					l2 = j2 - 1;
 			}
-			if (m_gotoI == j2) {
-				view.drawStartFlag((points[m_gotoI][0] + j1 << 3) >> 16, (points[m_gotoI][1] + l1 << 3) >> 16);
-				// Restore the last color used in the iteration (raised line = bg).
-				view.setRawArgb(bgColor);
-			}
-			if (m_forI == j2) {
-				view.drawFinishFlag((points[m_forI][0] + j1 << 3) >> 16, (points[m_forI][1] + l1 << 3) >> 16);
-				view.setRawArgb(bgColor);
-			}
+			lastIdx = j2;
 			if (points[j2][0] > m_dI)
 				break;
 			j2++;
 		} while (true);
-		int k1 = i3;
-		int i2 = j3;
+
+		// PASS 2 — fills in player-aware z-order so the segment closest
+		// to the bike (camera anchor) ends up on top. Upstream's pure
+		// left-to-right loop is correct on the LEFT half of the visible
+		// range (closer-to-player drawn last) but reversed on the RIGHT
+		// half (far-from-player drawn last → far paints over near, the
+		// "see-through-hills" artifact when fill is enabled).
+		//
+		// Skipped entirely in OFF mode so the wireframe render — which
+		// doesn't expose the issue because 1px strokes don't occlude — is
+		// unchanged from upstream.
+		if (fillMode != Settings.MAP_FILL_MODE_OFF) {
+			// playerIdx = segment whose [left, right] X-range straddles
+			// the bike x (k). Defaults to lastIdx if the bike is past the
+			// rightmost visible point.
+			int playerIdx = lastIdx;
+			for (int idx = firstIdx; idx < lastIdx; idx++) {
+				if (points[idx + 1][0] > k) {
+					playerIdx = idx;
+					break;
+				}
+			}
+			// Left of player: forward, so closest-on-left lands last on
+			// the left half.
+			for (int idx = firstIdx; idx < playerIdx; idx++)
+				paintTrackQuad(view, idx, fillMode, fillSolidColor);
+			// Right of player and player segment: reverse, so playerIdx
+			// itself (the absolute closest segment to the bike) is the
+			// very last fill drawn, on top of everything.
+			for (int idx = lastIdx; idx >= playerIdx; idx--)
+				paintTrackQuad(view, idx, fillMode, fillSolidColor);
+		}
+
+		// PASS 3 — contour line, across-tick rib, raised line, flags.
+		// Forward order; these are 1px strokes / N=6 highlight ribs with
+		// negligible mutual overlap so draw order among them is visually
+		// irrelevant, and putting them after fills guarantees they sit on
+		// top of the painted area-fill.
+		for (int idx = firstIdx; idx <= lastIdx; idx++) {
+			int j1 = pointOffsetX[idx];
+			int l1 = pointOffsetY[idx];
+			int i3 = pointOffsetX[idx + 1];
+			int j3 = pointOffsetY[idx + 1];
+
+			// Foreground contour: line between actual ground points
+			// (lower / front line visually).
+			view.setRawArgb(fgColor);
+			view._aIIIV((points[idx][0] << 3) >> 16, (points[idx][1] << 3) >> 16, (points[idx + 1][0] << 3) >> 16, (points[idx + 1][1] << 3) >> 16);
+			// Across tick from ground (fg) up to raised (bg). When Off
+			// collapses bg onto fg this degenerates to a solid fg tick.
+			if (ticksEnabled)
+				drawAcrossGradient(view, points[idx][0], points[idx][1], j1, l1, fgColor, bgColor);
+			// Background raised line (upper / back line visually).
+			view.setRawArgb(bgColor);
+			view._aIIIV((points[idx][0] + j1 << 3) >> 16, (points[idx][1] + l1 << 3) >> 16, (points[idx + 1][0] + i3 << 3) >> 16, (points[idx + 1][1] + j3 << 3) >> 16);
+
+			if (m_gotoI == idx) {
+				view.drawStartFlag((points[m_gotoI][0] + j1 << 3) >> 16, (points[m_gotoI][1] + l1 << 3) >> 16);
+				// Restore the last color used in the iteration (raised line = bg).
+				view.setRawArgb(bgColor);
+			}
+			if (m_forI == idx) {
+				view.drawFinishFlag((points[m_forI][0] + j1 << 3) >> 16, (points[m_forI][1] + l1 << 3) >> 16);
+				view.setRawArgb(bgColor);
+			}
+		}
+
 		// Trailing across tick at the last point, matching the in-loop ticks.
+		// Uses the offset of (lastIdx + 1) — the right side of the final
+		// drawn segment — preserving upstream behavior bit-for-bit.
 		if (ticksEnabled)
-			drawAcrossGradient(view, points[pointsCount - 1][0], points[pointsCount - 1][1], k1, i2, fgColor, bgColor);
+			drawAcrossGradient(view, points[pointsCount - 1][0], points[pointsCount - 1][1], pointOffsetX[lastIdx + 1], pointOffsetY[lastIdx + 1], fgColor, bgColor);
 		if (getLevelLoader().isShadowsEnabled())
 			_ifiIV(view, k2, l2);
+	}
+
+	// Computes and caches the normalized camera-ray offset for a single
+	// point. Same fixed-point math the upstream loop did inline: vector
+	// from point to camera anchor (k, i1 + 0x320000), normalized to .16
+	// fixed-point then scaled by 4 (the (>> 1 >> 1) chain divides the
+	// length by 4 before the divide, effectively multiplying the result).
+	private void cachePointOffset(int pointIdx, int cameraX, int cameraY) {
+		int dx = cameraX - points[pointIdx][0];
+		int dy = (cameraY + 0x320000) - points[pointIdx][1];
+		int len = Physics._doIII(dx, dy);
+		pointOffsetX[pointIdx] = (int) (((long) dx << 32) / (long) (len >> 1 >> 1) >> 16);
+		pointOffsetY[pointIdx] = (int) (((long) dy << 32) / (long) (len >> 1 >> 1) >> 16);
+	}
+
+	// Paints a single perspective-mode quad fill using the cached camera
+	// offsets. Called from pass 2 of _aiIV in player-aware z-order.
+	private void paintTrackQuad(GameView view, int segIdx, int fillMode, int fillSolidColor) {
+		int ax = points[segIdx][0],     ay = points[segIdx][1];
+		int bx = points[segIdx + 1][0], by = points[segIdx + 1][1];
+		int j1 = pointOffsetX[segIdx],     l1 = pointOffsetY[segIdx];
+		int i3 = pointOffsetX[segIdx + 1], j3 = pointOffsetY[segIdx + 1];
+		int cx = bx + i3, cy = by + j3;
+		int dx = ax + j1, dy = ay + l1;
+		if (fillMode == Settings.MAP_FILL_MODE_GRADIENT)
+			view.fillTrackQuadGradient(ax, ay, bx, by, cx, cy, dx, dy, stripColors);
+		else
+			view.fillTrackQuadSolid(ax, ay, bx, by, cx, cy, dx, dy, fillSolidColor);
 	}
 
 	// Across tick rendered as N straight sub-segments from the ground point
