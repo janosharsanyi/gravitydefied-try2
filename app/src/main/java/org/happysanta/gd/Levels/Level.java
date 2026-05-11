@@ -153,7 +153,7 @@ public class Level {
 			if (alpha < 0) alpha = 0;
 			if (alpha > 0xff) alpha = 0xff;
 			if (alpha > 0) {
-				int base = Settings.getShadowNeonBaseColor(mode);
+				int base = Settings.getShadowNeonBaseColor(getLevelLoader().getNeonColor());
 				// setRawArgb bypasses the dark-mode remap in setColor so
 				// the neon hue passes through untouched and the alpha
 				// channel actually takes effect on the line stroke.
@@ -178,20 +178,35 @@ public class Level {
 	}
 
 	public synchronized void _aiIV(GameView view, int k, int i1) {
-		// Track color preset routing. ORIGINAL keeps the legacy 2-line
-		// render with a single color set once before the loop (matches
-		// upstream pixel-for-pixel). Any other preset opts in to the
-		// 3-line render — colors set per draw via setRawArgb so the
-		// dark-mode invert in setColor doesn't clobber the palette.
-		// Naming follows the visual depth of the lines (see Settings):
+		// Single uniform 3-line render. Every track-color preset (including
+		// Original) flows through the same path; the only thing that varies
+		// is the (fg, bg) pair we set per line. Colors set per draw via
+		// setRawArgb so the dark-mode invert in setColor doesn't clobber
+		// the palette. Naming follows the visual depth of the lines (see
+		// Settings):
 		//   fgColor → drawn on the lower/ground contour line (brighter)
 		//   bgColor → drawn on the upper/raised projection line (darker)
 		// Across tick gradients from fgColor at the ground end up to
-		// bgColor at the raised end.
+		// bgColor at the raised end. Gradient transform: ON = identity,
+		// INVERTED = swap FG/BG, OFF = collapse BG onto FG (so the across
+		// gradient between two equal colors degenerates to a solid FG tick
+		// and the raised line matches the ground line — single-color render
+		// without a separate code path).
 		int trackMode = getLevelLoader().getTrackColorMode();
-		boolean preset = trackMode != Settings.TRACK_COLOR_ORIGINAL;
-		int fgColor = preset ? Settings.getTrackForegroundArgb(trackMode) : 0;
-		int bgColor = preset ? Settings.getTrackBackgroundArgb(trackMode) : 0;
+		int rawFg = Settings.getTrackForegroundArgb(trackMode);
+		int rawBg = Settings.getTrackBackgroundArgb(trackMode);
+		int fgColor, bgColor;
+		switch (getLevelLoader().getMapColorGradient()) {
+			case Settings.MAP_COLOR_GRADIENT_INVERTED:
+				fgColor = rawBg; bgColor = rawFg;
+				break;
+			case Settings.MAP_COLOR_GRADIENT_OFF:
+				fgColor = rawFg; bgColor = rawFg;
+				break;
+			default: // MAP_COLOR_GRADIENT_ON
+				fgColor = rawFg; bgColor = rawBg;
+				break;
+		}
 
 		int k2 = 0;
 		int l2 = 0;
@@ -204,8 +219,6 @@ public class Level {
 		int k3 = Physics._doIII(i3, j3);
 		i3 = (int) (((long) i3 << 32) / (long) (k3 >> 1 >> 1) >> 16);
 		j3 = (int) (((long) j3 << 32) / (long) (k3 >> 1 >> 1) >> 16);
-		if (!preset)
-			view.setColor(0, 170, 0);
 		do {
 			if (j2 >= pointsCount - 1)
 				break;
@@ -216,20 +229,16 @@ public class Level {
 			int l3 = Physics._doIII(i3, j3);
 			i3 = (int) (((long) i3 << 32) / (long) (l3 >> 1 >> 1) >> 16);
 			j3 = (int) (((long) j3 << 32) / (long) (l3 >> 1 >> 1) >> 16);
-			if (preset) {
-				// Foreground contour: line between actual ground points
-				// (lower / front line visually). Not drawn at all in ORIGINAL.
-				view.setRawArgb(fgColor);
-				view._aIIIV((points[j2][0] << 3) >> 16, (points[j2][1] << 3) >> 16, (points[j2 + 1][0] << 3) >> 16, (points[j2 + 1][1] << 3) >> 16);
-				// Gradient across tick from ground (fg) up to raised (bg).
-				drawAcrossGradient(view, points[j2][0], points[j2][1], j1, l1, fgColor, bgColor);
-				// Background raised line (upper / back line visually).
-				view.setRawArgb(bgColor);
-				view._aIIIV((points[j2][0] + j1 << 3) >> 16, (points[j2][1] + l1 << 3) >> 16, (points[j2 + 1][0] + i3 << 3) >> 16, (points[j2 + 1][1] + j3 << 3) >> 16);
-			} else {
-				view._aIIIV((points[j2][0] + j1 << 3) >> 16, (points[j2][1] + l1 << 3) >> 16, (points[j2 + 1][0] + i3 << 3) >> 16, (points[j2 + 1][1] + j3 << 3) >> 16);
-				view._aIIIV((points[j2][0] << 3) >> 16, (points[j2][1] << 3) >> 16, (points[j2][0] + j1 << 3) >> 16, (points[j2][1] + l1 << 3) >> 16);
-			}
+			// Foreground contour: line between actual ground points
+			// (lower / front line visually).
+			view.setRawArgb(fgColor);
+			view._aIIIV((points[j2][0] << 3) >> 16, (points[j2][1] << 3) >> 16, (points[j2 + 1][0] << 3) >> 16, (points[j2 + 1][1] << 3) >> 16);
+			// Across tick from ground (fg) up to raised (bg). When Off
+			// collapses bg onto fg this degenerates to a solid fg tick.
+			drawAcrossGradient(view, points[j2][0], points[j2][1], j1, l1, fgColor, bgColor);
+			// Background raised line (upper / back line visually).
+			view.setRawArgb(bgColor);
+			view._aIIIV((points[j2][0] + j1 << 3) >> 16, (points[j2][1] + l1 << 3) >> 16, (points[j2 + 1][0] + i3 << 3) >> 16, (points[j2 + 1][1] + j3 << 3) >> 16);
 			if (j2 > 1) {
 				if (points[j2][0] > m_eI && k2 == 0)
 					k2 = j2 - 1;
@@ -239,11 +248,11 @@ public class Level {
 			if (m_gotoI == j2) {
 				view.drawStartFlag((points[m_gotoI][0] + j1 << 3) >> 16, (points[m_gotoI][1] + l1 << 3) >> 16);
 				// Restore the last color used in the iteration (raised line = bg).
-				if (preset) view.setRawArgb(bgColor); else view.setColor(0, 170, 0);
+				view.setRawArgb(bgColor);
 			}
 			if (m_forI == j2) {
 				view.drawFinishFlag((points[m_forI][0] + j1 << 3) >> 16, (points[m_forI][1] + l1 << 3) >> 16);
-				if (preset) view.setRawArgb(bgColor); else view.setColor(0, 170, 0);
+				view.setRawArgb(bgColor);
 			}
 			if (points[j2][0] > m_dI)
 				break;
@@ -251,14 +260,8 @@ public class Level {
 		} while (true);
 		int k1 = i3;
 		int i2 = j3;
-		// Trailing across at the last point. Single-color in ORIGINAL,
-		// gradient (fg→bg, ground→raised) under any preset, matching the
-		// in-loop ticks.
-		if (preset) {
-			drawAcrossGradient(view, points[pointsCount - 1][0], points[pointsCount - 1][1], k1, i2, fgColor, bgColor);
-		} else {
-			view._aIIIV((points[pointsCount - 1][0] << 3) >> 16, (points[pointsCount - 1][1] << 3) >> 16, (points[pointsCount - 1][0] + k1 << 3) >> 16, (points[pointsCount - 1][1] + i2 << 3) >> 16);
-		}
+		// Trailing across tick at the last point, matching the in-loop ticks.
+		drawAcrossGradient(view, points[pointsCount - 1][0], points[pointsCount - 1][1], k1, i2, fgColor, bgColor);
 		if (getLevelLoader().isShadowsEnabled())
 			_ifiIV(view, k2, l2);
 	}
@@ -300,14 +303,15 @@ public class Level {
 	public synchronized void _aiV(GameView view) {
 		// Flat / perspective-off render. Each segment is one line between
 		// the actual ground points — visually the lower / foreground line
-		// of the track. For preset modes we render it in the fg color
-		// (ORIGINAL keeps the legacy bright green primed by Loader._aiV).
-		// Single-color path for v1; revisit at playtest if it looks bad.
+		// of the track. The gradient setting picks which preset color
+		// paints it: ON / OFF use FG (the "primary"); INVERTED uses BG so
+		// the swap stays consistent with the perspective-on render.
 		int trackMode = getLevelLoader().getTrackColorMode();
-		boolean preset = trackMode != Settings.TRACK_COLOR_ORIGINAL;
-		int fgColor = preset ? Settings.getTrackForegroundArgb(trackMode) : 0;
-		if (preset)
-			view.setRawArgb(fgColor);
+		int rawFg = Settings.getTrackForegroundArgb(trackMode);
+		int rawBg = Settings.getTrackBackgroundArgb(trackMode);
+		int fgColor = (getLevelLoader().getMapColorGradient() == Settings.MAP_COLOR_GRADIENT_INVERTED)
+				? rawBg : rawFg;
+		view.setRawArgb(fgColor);
 		int k;
 		for (k = 0; k < pointsCount - 1 && points[k][0] <= m_aI; k++) ;
 		if (k > 0)
@@ -318,11 +322,11 @@ public class Level {
 			view._aIIIV((points[k][0] << 3) >> 16, (points[k][1] << 3) >> 16, (points[k + 1][0] << 3) >> 16, (points[k + 1][1] << 3) >> 16);
 			if (m_gotoI == k) {
 				view.drawStartFlag((points[m_gotoI][0] << 3) >> 16, (points[m_gotoI][1] << 3) >> 16);
-				if (preset) view.setRawArgb(fgColor); else view.setColor(0, 255, 0);
+				view.setRawArgb(fgColor);
 			}
 			if (m_forI == k) {
 				view.drawFinishFlag((points[m_forI][0] << 3) >> 16, (points[m_forI][1] << 3) >> 16);
-				if (preset) view.setRawArgb(fgColor); else view.setColor(0, 255, 0);
+				view.setRawArgb(fgColor);
 			}
 			if (points[k][0] > m_dI)
 				break;

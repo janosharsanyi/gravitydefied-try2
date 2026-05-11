@@ -134,23 +134,61 @@ Display
   off.
 
 Gameplay visuals
-- Driver-shadow option widened from a boolean (Off/On) to a multi-state
-  setting (Off / Shadow / Yellow / Red / Purple / Blue / Cyan / Green
-  Neon). The neon modes re-use the existing shadow render path but
-  invert the brightness ramp — close to ground glows in the neon base
-  color, fading to a dark gray (#363636) as the bike rises. Default
-  stays "Shadow" so the original behavior is preserved.
-- Track-color preset added (Original / Green / Cyan / Red / Yellow /
-  Lime / Blue / Gray / Black/White). Original keeps the legacy
-  single-color render. Every other preset opts in to a 3-line render
-  using two preset colors named by visual depth: a foreground
-  (lower / brighter) line on the actual ground points, a background
-  (upper / darker) line on the raised perspective projection, and an
-  across tick rendered as a gradient from foreground at the ground
-  end up to background at the raised end. Black/White is theme-aware
+- Driver-shadow option widened from a boolean (Off/On) to a tri-state
+  (Off / Shadow / Neon). Shadow is the original gray fade; Neon re-uses
+  the same render path but inverts the brightness ramp — close to ground
+  glows in the active neon base color, fading to a dark gray (#363636)
+  as the bike rises. The actual hue used by Neon is picked separately
+  via a dedicated "Neon color" setting under the Colors submenu (Yellow,
+  Red, Purple, Blue, Cyan, Green, plus three user-editable Custom
+  slots). Default stays "Shadow" so the original behavior is preserved.
+  One-shot migration translates pre-collapse shadow_mode values 2..7
+  (the old per-color neons) into shadow_mode=Neon + the matching
+  NEON_COLOR_*, so existing players keep their previously selected
+  combination across the upgrade.
+- Track render reworked to a uniform 3-line path used by every color
+  preset. Each segment draws: foreground = the lower / brighter line on
+  the actual ground points, background = the upper / darker line on the
+  raised perspective projection (also the raised end of an across tick
+  rendered as a smooth foreground→background gradient). Replaces the
+  upstream 2-line raised+across-tick render. Default Original carries
+  the two upstream greens with the brighter one as foreground
+  (#00FF00 / #00AA00), so the default Solid render matches upstream's
+  flat-track bright green. Other presets available are Cyan / Red /
+  Yellow / Lime / Blue / Gray / Black/White. Black/White is theme-aware
   (foreground white in dark mode, black in light mode; background
-  always darker than foreground). Default stays "Original" so the
-  original behavior is preserved bit-for-bit.
+  always darker than foreground).
+- Map color gradient option added (Solid / Gradient / Reversed) —
+  applies to every preset including Original. Solid ignores the
+  background color and draws every line of the render in foreground
+  (the across "gradient" degenerates to a solid foreground tick), so
+  the render is effectively single-color even with perspective on.
+  Gradient is the canonical 3-line render with a foreground→background
+  across gradient. Reversed swaps foreground and background so the
+  brighter line moves onto the raised projection — and dims the
+  perspective-off line too (it uses background when reversed). Default
+  Solid keeps a single-color track look out of the box. A previous
+  standalone "Green" preset was removed in the same change — Original
+  carries the upstream green pair so a green-themed track gradient is
+  still reachable via Original + Gradient.
+
+- Colors submenu added under Options consolidating every color-related
+  setting in one place: Track color preset (now 8 built-ins + 3
+  user-editable Custom slots), Map color gradient toggle, six in-place
+  editable RGB channel rows (FG R/G/B + BG R/G/B) for the active track
+  preset, Neon color preset (6 built-in hues + 3 Custom slots), three
+  in-place editable RGB rows for the active neon preset, and two
+  "Copy preset into Custom…" actions that snapshot the active preset's
+  channels into a chosen Custom slot. Editing on a channel row uses an
+  in-place 3-digit cursor (UP/DOWN cycle digit 0–9, LEFT/RIGHT move,
+  FIRE advances/exits) modeled on the high-score name entry; assembled
+  values clamp to 255 on exit. Selecting a channel row while a built-in
+  preset is active routes to the copy-into-Custom chooser instead of
+  entering edit mode, so the built-in palettes stay read-only. Works
+  with touch, on-screen keypad, physical keyboard, and gamepad
+  identically; the Colors screen overrides UP/DOWN routing locally so
+  digit cycling reaches the highlighted row while in edit mode without
+  losing list navigation otherwise.
 
 Other
 - Cosmetic / clarity comments added at sites where an API change forced a

@@ -254,12 +254,13 @@ public class OptionsMenuElement
 					}
 					return;
 				}
+				// Wrap past the last entry back to the first, matching the
+				// FIRE-key cycle (which already wraps via setSelectedOption).
 				selectedIndex++;
 				if (selectedIndex > options.length - 1)
-					selectedIndex = options.length - 1;
-				else
-					handler.handleAction(this);
+					selectedIndex = 0;
 				updateSelectedOption();
+				handler.handleAction(this);
 				return;
 
 			case MenuScreen.KEY_LEFT: // '\003'
@@ -272,14 +273,12 @@ public class OptionsMenuElement
 					}
 					return;
 				}
+				// Wrap past the first entry to the last, symmetric with RIGHT.
 				selectedIndex--;
-				if (selectedIndex < 0) {
-					selectedIndex = 0;
-				} else {
-					updateSelectedOption();
-					handler.handleAction(this);
-				}
+				if (selectedIndex < 0)
+					selectedIndex = options.length - 1;
 				updateSelectedOption();
+				handler.handleAction(this);
 				break;
 		}
 	}

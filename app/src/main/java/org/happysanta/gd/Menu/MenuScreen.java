@@ -168,6 +168,17 @@ public class MenuScreen
 		return false;
 	}
 
+	/**
+	 * Optional BACK-key intercept. Called by {@link Menu#back()} before
+	 * navigating to {@code navTarget}. Default returns {@code false} (let
+	 * the menu pop as usual). Screens that have an in-place editor (see
+	 * {@link ColorsMenuScreen}) can override to commit the editor and
+	 * swallow the BACK so it doesn't escape the screen on the same press.
+	 */
+	public boolean handleBack() {
+		return false;
+	}
+
 	public MenuScreen getNavTarget() {
 		return navTarget;
 	}

@@ -45,7 +45,26 @@
 
 	<string name="perspective">Perspective</string>
 	<string name="shadows">Shadows</string>
+	<string name="colors">Colors</string>
 	<string name="track_color">Track color</string>
+	<string name="map_color_gradient">Map color gradient</string>
+	<string name="neon_color">Neon color</string>
+	<!-- Track FG/BG channel row labels. Shown as e.g. "FG R: 255" on the
+	     Colors submenu. -->
+	<string name="track_fg_r">FG R</string>
+	<string name="track_fg_g">FG G</string>
+	<string name="track_fg_b">FG B</string>
+	<string name="track_bg_r">BG R</string>
+	<string name="track_bg_g">BG G</string>
+	<string name="track_bg_b">BG B</string>
+	<!-- Neon channel row labels (single R/G/B — neon has no FG/BG pair). -->
+	<string name="neon_r">R</string>
+	<string name="neon_g">G</string>
+	<string name="neon_b">B</string>
+	<!-- Copy-into-Custom action labels and chooser screen titles. -->
+	<string name="copy_track_preset">Copy track preset into Custom\u2026</string>
+	<string name="copy_neon_preset">Copy neon preset into Custom\u2026</string>
+	<string name="copy_into_custom_title">Copy into Custom</string>
 	<string name="driver_sprite">Driver sprite</string>
 	<string name="bike_sprite">Bike sprite</string>
 	<string name="input">Input</string>
@@ -191,22 +210,39 @@
 		<item>Off</item>
 	</string-array>
 
-	<!-- Order must match Settings.SHADOW_MODE_* constants. -->
+	<!-- Order must match Settings.SHADOW_MODE_* constants
+	     (OFF / SHADOW / NEON). Neon hue is picked separately via the
+	     "Neon color" option on the Colors submenu. -->
 	<string-array name="shadow_mode_options">
 		<item>Off</item>
 		<item>Shadow</item>
-		<item>Yellow Neon</item>
-		<item>Red Neon</item>
-		<item>Purple Neon</item>
-		<item>Blue Neon</item>
-		<item>Cyan Neon</item>
-		<item>Green Neon</item>
+		<item>Neon</item>
 	</string-array>
 
-	<!-- Order must match Settings.TRACK_COLOR_* constants. -->
+	<!-- Order must match Settings.NEON_COLOR_* constants
+	     (YELLOW / RED / PURPLE / BLUE / CYAN / GREEN /
+	     CUSTOM_1 / CUSTOM_2 / CUSTOM_3). -->
+	<string-array name="neon_color_options">
+		<item>Yellow</item>
+		<item>Red</item>
+		<item>Purple</item>
+		<item>Blue</item>
+		<item>Cyan</item>
+		<item>Green</item>
+		<item>Custom 1</item>
+		<item>Custom 2</item>
+		<item>Custom 3</item>
+	</string-array>
+
+	<!-- Order must match Settings.TRACK_COLOR_* constants. The legacy
+	     "Green" preset was dropped — Original now carries the two upstream
+	     greens (bright FG / dim BG), so a green-themed gradient is still
+	     accessible via Original + Map color gradient = Gradient.
+	     Three user-editable Custom slots are appended after the built-ins;
+	     selecting a built-in row's FG/BG channel triggers a copy-into-
+	     Custom chooser instead of in-place editing. -->
 	<string-array name="track_color_options">
 		<item>Original</item>
-		<item>Green</item>
 		<item>Cyan</item>
 		<item>Red</item>
 		<item>Yellow</item>
@@ -214,6 +250,27 @@
 		<item>Blue</item>
 		<item>Gray</item>
 		<item>Black/White</item>
+		<item>Custom 1</item>
+		<item>Custom 2</item>
+		<item>Custom 3</item>
+	</string-array>
+
+	<!-- Shared by the track and neon copy-into-Custom chooser screens.
+	     Three slot options + Back. -->
+	<string-array name="custom_slot_options">
+		<item>Custom 1</item>
+		<item>Custom 2</item>
+		<item>Custom 3</item>
+	</string-array>
+
+	<!-- Order must match Settings.MAP_COLOR_GRADIENT_* constants
+	     (OFF / ON / INVERTED). Labels describe the visual outcome:
+	     Solid = single color, Gradient = bright→dim ground-to-raised,
+	     Reversed = dim→bright. Default is Solid. -->
+	<string-array name="map_color_gradient_options">
+		<item>Solid</item>
+		<item>Gradient</item>
+		<item>Reversed</item>
 	</string-array>
 
 	<string-array name="keyset">

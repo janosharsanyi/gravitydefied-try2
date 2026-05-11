@@ -17,50 +17,128 @@ public class Settings {
 	private static final boolean PERSPECTIVE_ENABLED_DEFAULT = true;
 
 	// Driver shadow mode. The original game just had a boolean
-	// "shadows on/off" — we widen that to also offer a few "neon" modes
-	// that re-use the same render path but invert the brightness ramp:
-	// instead of fading in the shadow as the bike rises (close = dark,
-	// far = light gray) the neon modes fade *out* a glow under the bike
-	// (close = bright neon base, far = #363636). Mode 0 keeps "off",
-	// mode 1 is the original shadow; modes 2..7 are the neons. Default
-	// stays "Shadow" so existing players see no visible change.
+	// "shadows on/off" — we widen that to OFF / SHADOW / NEON. SHADOW is
+	// the original gray fade (close = dark, far = light gray); NEON
+	// re-uses the same render path but inverts the brightness ramp,
+	// fading *out* a glow under the bike (close = bright neon base, far
+	// = #363636). The actual neon hue is decoupled from this mode and
+	// lives in NEON_COLOR below. Default stays "Shadow" so existing
+	// players see no visible change.
 	public static final int SHADOW_MODE_OFF = 0;
 	public static final int SHADOW_MODE_SHADOW = 1;
-	public static final int SHADOW_MODE_NEON_YELLOW = 2;
-	public static final int SHADOW_MODE_NEON_RED = 3;
-	public static final int SHADOW_MODE_NEON_PURPLE = 4;
-	public static final int SHADOW_MODE_NEON_BLUE = 5;
-	public static final int SHADOW_MODE_NEON_CYAN = 6;
-	public static final int SHADOW_MODE_NEON_GREEN = 7;
+	public static final int SHADOW_MODE_NEON = 2;
 	private static final String SHADOW_MODE = "shadow_mode";
 	private static final int SHADOW_MODE_DEFAULT = SHADOW_MODE_SHADOW;
-	// Track color preset. Original keeps the legacy single-color render
-	// (perspective-on draws one green line per segment, perspective-off the
-	// same in brighter green; no background contour, no across gradient).
-	// Every other preset opts in to the new 3-color render. Naming follows
-	// the visual depth of the two lines, *not* draw order:
+
+	// One-time migration when shadow_mode was collapsed from 8 entries
+	// (OFF / SHADOW / NEON_YELLOW..GREEN) to 3 (OFF / SHADOW / NEON) and
+	// the neon hue was split out into its own NEON_COLOR pref. Old values
+	// 2..7 (the per-color neons) map to SHADOW_MODE_NEON + the
+	// corresponding NEON_COLOR_*. Safe on fresh install (no SHADOW_MODE
+	// key → reads default 1 = SHADOW, hits the "leave alone" branch).
+	private static final String SHADOW_MODE_MIGRATED_V2 = "shadow_mode_migrated_v2";
+
+	// Neon hue preset for SHADOW_MODE_NEON. Six built-in colors plus three
+	// user-editable Custom slots whose RGB channels live in their own
+	// prefs (see NEON_CUSTOM_*_R/G/B). Custom slots seed from
+	// NEON_COLOR_YELLOW on first read. Independent of SHADOW_MODE — the
+	// hue persists across switching shadow modes off and back on.
+	public static final int NEON_COLOR_YELLOW = 0;
+	public static final int NEON_COLOR_RED = 1;
+	public static final int NEON_COLOR_PURPLE = 2;
+	public static final int NEON_COLOR_BLUE = 3;
+	public static final int NEON_COLOR_CYAN = 4;
+	public static final int NEON_COLOR_GREEN = 5;
+	public static final int NEON_COLOR_CUSTOM_1 = 6;
+	public static final int NEON_COLOR_CUSTOM_2 = 7;
+	public static final int NEON_COLOR_CUSTOM_3 = 8;
+	private static final String NEON_COLOR = "neon_color";
+	private static final int NEON_COLOR_DEFAULT = NEON_COLOR_YELLOW;
+	// Track color preset. Picks the FG/BG color pair fed to the uniform
+	// 3-line track render; how the pair is *applied* (single-color vs
+	// gradient vs inverted) is controlled by MAP_COLOR_GRADIENT below.
 	//   - FG (foreground / lower) = the actual ground contour line, drawn
 	//     between adjacent ground points. Brighter of the two colors.
 	//   - BG (background / upper) = the raised perspective projection line,
-	//     drawn between the projected points. Darker of the two colors.
-	//   - Across tick is a gradient from FG (ground end) up to BG (raised
-	//     end). Per design rule the BG luma is always lower than the FG.
+	//     drawn between the projected points; also the raised end of the
+	//     across tick gradient. Per design rule BG luma < FG luma.
 	// FG/BG color values are HSL-matched against a cyan reference (FG ≈
-	// S=85% L=77%, BG ≈ S=23% L=48%), except Green which uses the original
-	// perspective color (#00AA00) as FG and the same hue dimmed by the
-	// cyan FG→BG ratio (~0.61) for BG. Black/White is theme-aware via
-	// isDarkModeEnabled.
+	// S=85% L=77%, BG ≈ S=23% L=48%). Black/White is theme-aware via
+	// isDarkModeEnabled. Original is the two upstream greens, brighter as
+	// FG: FG = #00FF00 (upstream's perspective-off bright green, picked so
+	// the default GRADIENT_OFF renders bright single-color green and
+	// matches upstream's flat track); BG = #00AA00 (upstream's perspective-
+	// on dim green). GRADIENT_ON gives a bright→dim ground-to-raised
+	// gradient; GRADIENT_INVERTED puts dim on the ground and bright on the
+	// raised projection — and dims the perspective-off line too (it uses
+	// BG when inverted).
 	public static final int TRACK_COLOR_ORIGINAL = 0;
-	public static final int TRACK_COLOR_GREEN = 1;
-	public static final int TRACK_COLOR_CYAN = 2;
-	public static final int TRACK_COLOR_RED = 3;
-	public static final int TRACK_COLOR_YELLOW = 4;
-	public static final int TRACK_COLOR_LIME = 5;
-	public static final int TRACK_COLOR_BLUE = 6;
-	public static final int TRACK_COLOR_GRAY = 7;
-	public static final int TRACK_COLOR_BW = 8;
+	public static final int TRACK_COLOR_CYAN = 1;
+	public static final int TRACK_COLOR_RED = 2;
+	public static final int TRACK_COLOR_YELLOW = 3;
+	public static final int TRACK_COLOR_LIME = 4;
+	public static final int TRACK_COLOR_BLUE = 5;
+	public static final int TRACK_COLOR_GRAY = 6;
+	public static final int TRACK_COLOR_BW = 7;
+	// Three user-editable Custom slots appended after the built-ins. Each
+	// slot persists its own six channels (FG R/G/B + BG R/G/B); see
+	// TRACK_CUSTOM_*_FG_R / _BG_R below. Slots seed from
+	// TRACK_COLOR_ORIGINAL on first read.
+	public static final int TRACK_COLOR_CUSTOM_1 = 8;
+	public static final int TRACK_COLOR_CUSTOM_2 = 9;
+	public static final int TRACK_COLOR_CUSTOM_3 = 10;
 	private static final String TRACK_COLOR = "track_color";
 	private static final int TRACK_COLOR_DEFAULT = TRACK_COLOR_ORIGINAL;
+
+	// Per-channel storage for the three Custom track presets. Each slot
+	// holds six int prefs (FG R/G/B and BG R/G/B). Sentinel -1 means
+	// "uninitialized" — getTrackCustomChannel seeds the slot from
+	// TRACK_COLOR_ORIGINAL on the first read.
+	private static final String[] TRACK_CUSTOM_FG_R = {
+			"track_custom_1_fg_r", "track_custom_2_fg_r", "track_custom_3_fg_r"};
+	private static final String[] TRACK_CUSTOM_FG_G = {
+			"track_custom_1_fg_g", "track_custom_2_fg_g", "track_custom_3_fg_g"};
+	private static final String[] TRACK_CUSTOM_FG_B = {
+			"track_custom_1_fg_b", "track_custom_2_fg_b", "track_custom_3_fg_b"};
+	private static final String[] TRACK_CUSTOM_BG_R = {
+			"track_custom_1_bg_r", "track_custom_2_bg_r", "track_custom_3_bg_r"};
+	private static final String[] TRACK_CUSTOM_BG_G = {
+			"track_custom_1_bg_g", "track_custom_2_bg_g", "track_custom_3_bg_g"};
+	private static final String[] TRACK_CUSTOM_BG_B = {
+			"track_custom_1_bg_b", "track_custom_2_bg_b", "track_custom_3_bg_b"};
+
+	// Per-channel storage for the three Custom neon presets. Each slot
+	// holds three int prefs (R/G/B). Sentinel -1 means uninitialized —
+	// getNeonCustomChannel seeds the slot from NEON_COLOR_YELLOW on the
+	// first read.
+	private static final String[] NEON_CUSTOM_R = {
+			"neon_custom_1_r", "neon_custom_2_r", "neon_custom_3_r"};
+	private static final String[] NEON_CUSTOM_G = {
+			"neon_custom_1_g", "neon_custom_2_g", "neon_custom_3_g"};
+	private static final String[] NEON_CUSTOM_B = {
+			"neon_custom_1_b", "neon_custom_2_b", "neon_custom_3_b"};
+
+	// Map color gradient: how the FG/BG pair combines on the uniform 3-line
+	// track render. OFF ignores BG entirely — every line of the render
+	// (ground contour, raised projection, across tick) draws in FG; the
+	// across "gradient" degenerates to a solid FG tick. ON keeps the
+	// canonical 3-line render (ground=FG, raised=BG, across gradients
+	// FG→BG). INVERTED swaps FG/BG so the brighter line sits on the raised
+	// projection. Default OFF — single-color render across all presets.
+	public static final int MAP_COLOR_GRADIENT_OFF = 0;
+	public static final int MAP_COLOR_GRADIENT_ON = 1;
+	public static final int MAP_COLOR_GRADIENT_INVERTED = 2;
+	private static final String MAP_COLOR_GRADIENT = "map_color_gradient";
+	private static final int MAP_COLOR_GRADIENT_DEFAULT = MAP_COLOR_GRADIENT_OFF;
+
+	// One-time migration when the legacy "Green" preset was removed.
+	// Pre-migration encoding: ORIGINAL=0, GREEN=1, CYAN=2, RED=3, YELLOW=4,
+	// LIME=5, BLUE=6, GRAY=7, BW=8. New encoding drops GREEN and shifts
+	// everything ≥CYAN down by one. Users who had GREEN selected land on
+	// ORIGINAL + GRADIENT_ON, which keeps them on a green-themed two-tone
+	// gradient — different shade pair than the old Green preset, but the
+	// closest visual continuation given Original's reshuffled FG/BG.
+	private static final String TRACK_COLOR_MIGRATED_V2 = "track_color_migrated_v2";
 
 	// Floor for the neon "proximity" metric. m_rI in Level._ifiIV measures
 	// bike-body distance above ground — but the body sits above the wheels
@@ -257,12 +335,60 @@ public class Settings {
 
 	static {
 		preferences = getGDActivity().getSharedPreferences("GDSettings", Context.MODE_PRIVATE);
+		migrateTrackColorIfNeeded();
+		migrateShadowModeIfNeeded();
+	}
+
+	// One-shot, idempotent. Translates the pre-removal-of-Green pref into
+	// the new compact encoding. Safe on a fresh install (no TRACK_COLOR key
+	// → reads default 0, hits the "leave alone" branch, just sets the flag).
+	private static void migrateTrackColorIfNeeded() {
+		if (preferences.getBoolean(TRACK_COLOR_MIGRATED_V2, false))
+			return;
+		int legacyGreen = 1;
+		int legacyMaxBw = 8;
+		int old = preferences.getInt(TRACK_COLOR, TRACK_COLOR_DEFAULT);
+		SharedPreferences.Editor editor = preferences.edit();
+		if (old == legacyGreen) {
+			// Land on the closest green-themed visual: ORIGINAL + GRADIENT_ON
+			// is a two-tone green gradient, not the same shade pair the old
+			// Green preset used but the closest match the new Original pair
+			// allows.
+			editor.putInt(TRACK_COLOR, TRACK_COLOR_ORIGINAL);
+			editor.putInt(MAP_COLOR_GRADIENT, MAP_COLOR_GRADIENT_ON);
+		} else if (old > legacyGreen && old <= legacyMaxBw) {
+			editor.putInt(TRACK_COLOR, old - 1);
+		}
+		editor.putBoolean(TRACK_COLOR_MIGRATED_V2, true);
+		editorApply(editor);
+	}
+
+	// One-shot, idempotent. Translates the pre-collapse shadow_mode pref
+	// (which folded an on/off plus a neon hue choice into one of 8 values)
+	// into the new {OFF, SHADOW, NEON} encoding plus an independent
+	// NEON_COLOR. Legacy values 2..7 = NEON_YELLOW..NEON_GREEN, now map to
+	// SHADOW_MODE_NEON + NEON_COLOR_YELLOW..GREEN (old - 2).
+	private static void migrateShadowModeIfNeeded() {
+		if (preferences.getBoolean(SHADOW_MODE_MIGRATED_V2, false))
+			return;
+		SharedPreferences.Editor editor = preferences.edit();
+		int legacyMaxNeon = 7;
+		int legacyFirstNeon = 2;
+		int old = preferences.getInt(SHADOW_MODE, SHADOW_MODE_DEFAULT);
+		if (old >= legacyFirstNeon && old <= legacyMaxNeon) {
+			editor.putInt(SHADOW_MODE, SHADOW_MODE_NEON);
+			editor.putInt(NEON_COLOR, old - legacyFirstNeon);
+		}
+		editor.putBoolean(SHADOW_MODE_MIGRATED_V2, true);
+		editorApply(editor);
 	}
 
 	public static void resetAll() {
 		setPerspectiveEnabled(PERSPECTIVE_ENABLED_DEFAULT);
 		setShadowMode(SHADOW_MODE_DEFAULT);
+		setNeonColor(NEON_COLOR_DEFAULT);
 		setTrackColorMode(TRACK_COLOR_DEFAULT);
+		setMapColorGradient(MAP_COLOR_GRADIENT_DEFAULT);
 		setDriverSpriteEnabled(DRIVER_SPRITE_ENABLED_DEFAULT);
 		setBikeSpriteEnabled(BIKE_SPRITE_ENABLED_DEFAULT);
 		setLookAheadEnabled(LOOK_AHEAD_ENABLED_DEFAULT);
@@ -303,7 +429,7 @@ public class Settings {
 
 	public static int getShadowMode() {
 		int mode = preferences.getInt(SHADOW_MODE, SHADOW_MODE_DEFAULT);
-		if (mode < SHADOW_MODE_OFF || mode > SHADOW_MODE_NEON_GREEN)
+		if (mode < SHADOW_MODE_OFF || mode > SHADOW_MODE_NEON)
 			return SHADOW_MODE_DEFAULT;
 		return mode;
 	}
@@ -312,24 +438,46 @@ public class Settings {
 		setInt(SHADOW_MODE, mode);
 	}
 
-	// 0xRRGGBB base for a neon mode, or 0 if the mode is Off / classic Shadow
-	// (callers should special-case those before calling this). Centralized so
-	// the renderer and any future settings UI agree on the palette.
-	public static int getShadowNeonBaseColor(int mode) {
-		switch (mode) {
-			case SHADOW_MODE_NEON_YELLOW: return 0xffFDD449;
-			case SHADOW_MODE_NEON_RED:    return 0xffFD495B;
-			case SHADOW_MODE_NEON_PURPLE: return 0xffE749FD;
-			case SHADOW_MODE_NEON_BLUE:   return 0xff494BFD;
-			case SHADOW_MODE_NEON_CYAN:   return 0xff49FDE8;
-			case SHADOW_MODE_NEON_GREEN:  return 0xff54FD49;
+	public static int getNeonColor() {
+		int color = preferences.getInt(NEON_COLOR, NEON_COLOR_DEFAULT);
+		if (color < NEON_COLOR_YELLOW || color > NEON_COLOR_CUSTOM_3)
+			return NEON_COLOR_DEFAULT;
+		return color;
+	}
+
+	public static void setNeonColor(int color) {
+		setInt(NEON_COLOR, color);
+	}
+
+	// 0xAARRGGBB base color for a NEON_COLOR_* preset. Built-in presets
+	// return their fixed hue; Custom slots assemble ARGB from their stored
+	// R/G/B channels (which seed from NEON_COLOR_YELLOW on first read).
+	// Centralized so the renderer and any settings UI agree on the
+	// palette. Returns 0 for unknown values.
+	public static int getShadowNeonBaseColor(int neonColor) {
+		switch (neonColor) {
+			case NEON_COLOR_YELLOW: return 0xffFDD449;
+			case NEON_COLOR_RED:    return 0xffFD495B;
+			case NEON_COLOR_PURPLE: return 0xffE749FD;
+			case NEON_COLOR_BLUE:   return 0xff494BFD;
+			case NEON_COLOR_CYAN:   return 0xff49FDE8;
+			case NEON_COLOR_GREEN:  return 0xff54FD49;
+			case NEON_COLOR_CUSTOM_1:
+			case NEON_COLOR_CUSTOM_2:
+			case NEON_COLOR_CUSTOM_3: {
+				int slot = neonColor - NEON_COLOR_CUSTOM_1;
+				int r = getNeonCustomChannel(slot, 0);
+				int g = getNeonCustomChannel(slot, 1);
+				int b = getNeonCustomChannel(slot, 2);
+				return 0xff000000 | (r << 16) | (g << 8) | b;
+			}
 			default: return 0;
 		}
 	}
 
 	public static int getTrackColorMode() {
 		int mode = preferences.getInt(TRACK_COLOR, TRACK_COLOR_DEFAULT);
-		if (mode < TRACK_COLOR_ORIGINAL || mode > TRACK_COLOR_BW)
+		if (mode < TRACK_COLOR_ORIGINAL || mode > TRACK_COLOR_CUSTOM_3)
 			return TRACK_COLOR_DEFAULT;
 		return mode;
 	}
@@ -338,25 +486,45 @@ public class Settings {
 		setInt(TRACK_COLOR, mode);
 	}
 
+	public static int getMapColorGradient() {
+		int mode = preferences.getInt(MAP_COLOR_GRADIENT, MAP_COLOR_GRADIENT_DEFAULT);
+		if (mode < MAP_COLOR_GRADIENT_ON || mode > MAP_COLOR_GRADIENT_OFF)
+			return MAP_COLOR_GRADIENT_DEFAULT;
+		return mode;
+	}
+
+	public static void setMapColorGradient(int mode) {
+		setInt(MAP_COLOR_GRADIENT, mode);
+	}
+
 	// 0xAARRGGBB color for the FOREGROUND line — drawn between actual
-	// ground points (the lower / front line visually). Brighter of the
-	// two preset colors. 0 for ORIGINAL (callers must special-case ORIGINAL
-	// — it falls through to the legacy single-color render path).
+	// ground points (the lower / front line visually). Brighter of the two
+	// preset colors. Original returns upstream's perspective-off bright
+	// green (#00FF00) so the default Off render matches it.
 	public static int getTrackForegroundArgb(int mode) {
 		switch (mode) {
-			case TRACK_COLOR_GREEN:  return 0xff00AA00;
-			case TRACK_COLOR_CYAN:   return 0xff94E6F6;
-			case TRACK_COLOR_RED:    return 0xffF69494;
-			case TRACK_COLOR_YELLOW: return 0xffF6F694;
-			case TRACK_COLOR_LIME:   return 0xff94F694;
-			case TRACK_COLOR_BLUE:   return 0xff9494F6;
-			case TRACK_COLOR_GRAY:   return 0xffC4C4C4;
+			case TRACK_COLOR_ORIGINAL: return 0xff00FF00;
+			case TRACK_COLOR_CYAN:    return 0xff94E6F6;
+			case TRACK_COLOR_RED:     return 0xffF69494;
+			case TRACK_COLOR_YELLOW:  return 0xffF6F694;
+			case TRACK_COLOR_LIME:    return 0xff94F694;
+			case TRACK_COLOR_BLUE:    return 0xff9494F6;
+			case TRACK_COLOR_GRAY:    return 0xffC4C4C4;
 			// BW: FG must be lighter than BG (rule: BG always darker). In dark
 			// mode FG=white on the lower/ground line is the prominent stroke
 			// against the black canvas; in light mode FG=mid-gray recedes
 			// against white while the BG=black line on the raised/upper
 			// position is the prominent one.
-			case TRACK_COLOR_BW:     return isDarkModeEnabled() ? 0xffFFFFFF : 0xff666666;
+			case TRACK_COLOR_BW:      return isDarkModeEnabled() ? 0xffFFFFFF : 0xff666666;
+			case TRACK_COLOR_CUSTOM_1:
+			case TRACK_COLOR_CUSTOM_2:
+			case TRACK_COLOR_CUSTOM_3: {
+				int slot = mode - TRACK_COLOR_CUSTOM_1;
+				int r = getTrackCustomChannel(slot, false, 0);
+				int g = getTrackCustomChannel(slot, false, 1);
+				int b = getTrackCustomChannel(slot, false, 2);
+				return 0xff000000 | (r << 16) | (g << 8) | b;
+			}
 			default: return 0;
 		}
 	}
@@ -364,19 +532,125 @@ public class Settings {
 	// 0xAARRGGBB color for the BACKGROUND line — drawn between the raised
 	// perspective-projected points (the upper / back line visually); also
 	// the raised-end of the across gradient. Darker of the two preset
-	// colors. 0 for ORIGINAL.
+	// colors. Original returns upstream's perspective-on dim green
+	// (#00AA00) — paired with the bright FG it gives a gradient between
+	// the two upstream Original greens under GRADIENT_ON.
 	public static int getTrackBackgroundArgb(int mode) {
 		switch (mode) {
-			case TRACK_COLOR_GREEN:  return 0xff006900;
-			case TRACK_COLOR_CYAN:   return 0xff5E8C96;
-			case TRACK_COLOR_RED:    return 0xff965E5E;
-			case TRACK_COLOR_YELLOW: return 0xff96965E;
-			case TRACK_COLOR_LIME:   return 0xff5E965E;
-			case TRACK_COLOR_BLUE:   return 0xff5E5E96;
-			case TRACK_COLOR_GRAY:   return 0xff7A7A7A;
-			case TRACK_COLOR_BW:     return isDarkModeEnabled() ? 0xff999999 : 0xff000000;
+			case TRACK_COLOR_ORIGINAL: return 0xff00AA00;
+			case TRACK_COLOR_CYAN:    return 0xff5E8C96;
+			case TRACK_COLOR_RED:     return 0xff965E5E;
+			case TRACK_COLOR_YELLOW:  return 0xff96965E;
+			case TRACK_COLOR_LIME:    return 0xff5E965E;
+			case TRACK_COLOR_BLUE:    return 0xff5E5E96;
+			case TRACK_COLOR_GRAY:    return 0xff7A7A7A;
+			case TRACK_COLOR_BW:      return isDarkModeEnabled() ? 0xff999999 : 0xff000000;
+			case TRACK_COLOR_CUSTOM_1:
+			case TRACK_COLOR_CUSTOM_2:
+			case TRACK_COLOR_CUSTOM_3: {
+				int slot = mode - TRACK_COLOR_CUSTOM_1;
+				int r = getTrackCustomChannel(slot, true, 0);
+				int g = getTrackCustomChannel(slot, true, 1);
+				int b = getTrackCustomChannel(slot, true, 2);
+				return 0xff000000 | (r << 16) | (g << 8) | b;
+			}
 			default: return 0;
 		}
+	}
+
+	// Read one R/G/B channel (channel 0=R, 1=G, 2=B) of a track Custom
+	// slot's FG or BG color. Returns 0..255. Sentinel -1 in the pref means
+	// "uninitialized" — fall through to the seed value pulled from
+	// TRACK_COLOR_ORIGINAL so Custom slots open with a sensible
+	// not-zero-black appearance and the user can edit from there.
+	public static int getTrackCustomChannel(int slot, boolean isBackground, int channel) {
+		String key = trackCustomChannelKey(slot, isBackground, channel);
+		int v = preferences.getInt(key, -1);
+		if (v < 0 || v > 255) {
+			int seed = isBackground
+					? getTrackBackgroundArgb(TRACK_COLOR_ORIGINAL)
+					: getTrackForegroundArgb(TRACK_COLOR_ORIGINAL);
+			return (seed >> (16 - channel * 8)) & 0xff;
+		}
+		return v;
+	}
+
+	public static void setTrackCustomChannel(int slot, boolean isBackground, int channel, int value) {
+		if (value < 0) value = 0;
+		if (value > 255) value = 255;
+		setInt(trackCustomChannelKey(slot, isBackground, channel), value);
+	}
+
+	private static String trackCustomChannelKey(int slot, boolean isBackground, int channel) {
+		String[] arr;
+		if (isBackground) {
+			arr = (channel == 0) ? TRACK_CUSTOM_BG_R : (channel == 1) ? TRACK_CUSTOM_BG_G : TRACK_CUSTOM_BG_B;
+		} else {
+			arr = (channel == 0) ? TRACK_CUSTOM_FG_R : (channel == 1) ? TRACK_CUSTOM_FG_G : TRACK_CUSTOM_FG_B;
+		}
+		return arr[slot];
+	}
+
+	// 0..2 if the given track preset is one of the Custom slots, -1
+	// otherwise. Used by the Colors UI to decide whether the per-channel
+	// rows are editable in place (Custom) or trigger the copy-into-Custom
+	// chooser (built-in).
+	public static int getTrackCustomSlotIndex(int mode) {
+		if (mode >= TRACK_COLOR_CUSTOM_1 && mode <= TRACK_COLOR_CUSTOM_3)
+			return mode - TRACK_COLOR_CUSTOM_1;
+		return -1;
+	}
+
+	// Snapshot the FG/BG channels of any track preset (built-in or Custom)
+	// into the given Custom slot. Used by the copy-into-Custom action: the
+	// six channels are written so subsequent edits start from the chosen
+	// preset's exact values.
+	public static void copyTrackPresetIntoCustom(int srcMode, int dstSlot) {
+		int fg = getTrackForegroundArgb(srcMode);
+		int bg = getTrackBackgroundArgb(srcMode);
+		setTrackCustomChannel(dstSlot, false, 0, (fg >> 16) & 0xff);
+		setTrackCustomChannel(dstSlot, false, 1, (fg >> 8) & 0xff);
+		setTrackCustomChannel(dstSlot, false, 2, fg & 0xff);
+		setTrackCustomChannel(dstSlot, true, 0, (bg >> 16) & 0xff);
+		setTrackCustomChannel(dstSlot, true, 1, (bg >> 8) & 0xff);
+		setTrackCustomChannel(dstSlot, true, 2, bg & 0xff);
+	}
+
+	// Read one R/G/B channel (channel 0=R, 1=G, 2=B) of a neon Custom
+	// slot. Same -1-sentinel-seeds-from-default behavior as the track
+	// custom channels, but seeds from NEON_COLOR_YELLOW.
+	public static int getNeonCustomChannel(int slot, int channel) {
+		String key = neonCustomChannelKey(slot, channel);
+		int v = preferences.getInt(key, -1);
+		if (v < 0 || v > 255) {
+			int seed = getShadowNeonBaseColor(NEON_COLOR_YELLOW);
+			return (seed >> (16 - channel * 8)) & 0xff;
+		}
+		return v;
+	}
+
+	public static void setNeonCustomChannel(int slot, int channel, int value) {
+		if (value < 0) value = 0;
+		if (value > 255) value = 255;
+		setInt(neonCustomChannelKey(slot, channel), value);
+	}
+
+	private static String neonCustomChannelKey(int slot, int channel) {
+		String[] arr = (channel == 0) ? NEON_CUSTOM_R : (channel == 1) ? NEON_CUSTOM_G : NEON_CUSTOM_B;
+		return arr[slot];
+	}
+
+	public static int getNeonCustomSlotIndex(int neonColor) {
+		if (neonColor >= NEON_COLOR_CUSTOM_1 && neonColor <= NEON_COLOR_CUSTOM_3)
+			return neonColor - NEON_COLOR_CUSTOM_1;
+		return -1;
+	}
+
+	public static void copyNeonPresetIntoCustom(int srcColor, int dstSlot) {
+		int base = getShadowNeonBaseColor(srcColor);
+		setNeonCustomChannel(dstSlot, 0, (base >> 16) & 0xff);
+		setNeonCustomChannel(dstSlot, 1, (base >> 8) & 0xff);
+		setNeonCustomChannel(dstSlot, 2, base & 0xff);
 	}
 
 	public static boolean isDriverSpriteEnabled() {

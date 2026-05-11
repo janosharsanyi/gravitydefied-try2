@@ -76,6 +76,14 @@ public class Menu
 	private OptionsMenuElement perspectiveOptionItem;
 	private OptionsMenuElement shadowModeOptionItem;
 	private OptionsMenuElement trackColorOptionItem;
+	private OptionsMenuElement mapColorGradientOptionItem;
+	private OptionsMenuElement neonColorOptionItem;
+	private ColorsMenuScreen colorsScreen;
+	private MenuScreen trackCopyChooserScreen;
+	private MenuScreen neonCopyChooserScreen;
+	private SimpleMenuElementNew colorsMenuItem;
+	private SimpleMenuElementNew copyTrackPresetItem;
+	private SimpleMenuElementNew copyNeonPresetItem;
 	private OptionsMenuElement driverSpriteOptionItem;
 	private OptionsMenuElement bikeSpriteOptionItem;
 	private OptionsMenuElement inputOptionItem;
@@ -158,6 +166,9 @@ public class Menu
 	private String[] stickDeadzoneStrings = null;
 	private String[] shadowModeStrings = null;
 	private String[] trackColorStrings = null;
+	private String[] mapColorGradientStrings = null;
+	private String[] neonColorStrings = null;
+	private String[] customSlotStrings = null;
 	// private EmptyLineMenuElement emptyLine;
 	// private EmptyLineMenuElement emptyLineBeforeAction;
 	// private AlertDialog alertDialog = null;
@@ -204,6 +215,9 @@ public class Menu
 				stickDeadzoneStrings = getStringArray(R.array.stick_deadzone_options);
 				shadowModeStrings = getStringArray(R.array.shadow_mode_options);
 				trackColorStrings = getStringArray(R.array.track_color_options);
+				mapColorGradientStrings = getStringArray(R.array.map_color_gradient_options);
+				neonColorStrings = getStringArray(R.array.neon_color_options);
+				customSlotStrings = getStringArray(R.array.custom_slot_options);
 				difficultyLevels = getStringArray(R.array.difficulty);
 
 				// saveManager = new SaveManager();
@@ -329,7 +343,9 @@ public class Menu
 				}
 				getLevelLoader().setPerspectiveEnabled(Settings.isPerspectiveEnabled());
 				getLevelLoader().setShadowMode(Settings.getShadowMode());
+				getLevelLoader().setNeonColor(Settings.getNeonColor());
 				getLevelLoader().setTrackColorMode(Settings.getTrackColorMode());
+				getLevelLoader().setMapColorGradient(Settings.getMapColorGradient());
 				activity.physEngine._ifZV(Settings.isLookAheadEnabled());
 				getGDView().setInputOption(Settings.getInputOption());
 				// getGDView()._aZV(m_aTB == 0);
@@ -353,6 +369,14 @@ public class Menu
 				playMenu = new MenuScreen(getString(R.string.play), mainMenu);
 				managerScreen = new MenuScreen(getString(R.string.mods), mainMenu);
 				optionsMenu = new MenuScreen(getString(R.string.options), mainMenu);
+				// Pre-create the Colors submenu and its two copy-into-Custom
+				// choosers so the track / gradient / neon option items below
+				// can take colorsScreen as their parent screen. Their
+				// children (channel rows, copy entries) are wired up later by
+				// buildColorsSubmenu().
+				colorsScreen = new ColorsMenuScreen(getString(R.string.colors), optionsMenu);
+				trackCopyChooserScreen = new MenuScreen(getString(R.string.copy_into_custom_title), colorsScreen);
+				neonCopyChooserScreen = new MenuScreen(getString(R.string.copy_into_custom_title), colorsScreen);
 				aboutScreen = new MenuScreen(getString(R.string.about) + " v" + getAppVersion(), mainMenu);
 				helpMenu = new MenuScreen(getString(R.string.help), mainMenu);
 
@@ -411,7 +435,9 @@ public class Menu
 				// 	softwareJoystickOptionItem = new ActionMenuElement("Software Joystick", m_aTB, this, onOffStrings, true, activity, optionsMenu, false);
 				perspectiveOptionItem = new OptionsMenuElement(getString(R.string.perspective), Settings.isPerspectiveEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				shadowModeOptionItem = new OptionsMenuElement(getString(R.string.shadows), Settings.getShadowMode(), this, shadowModeStrings, false, optionsMenu);
-				trackColorOptionItem = new OptionsMenuElement(getString(R.string.track_color), Settings.getTrackColorMode(), this, trackColorStrings, false, optionsMenu);
+				trackColorOptionItem = new OptionsMenuElement(getString(R.string.track_color), Settings.getTrackColorMode(), this, trackColorStrings, false, colorsScreen);
+				mapColorGradientOptionItem = new OptionsMenuElement(getString(R.string.map_color_gradient), Settings.getMapColorGradient(), this, mapColorGradientStrings, false, colorsScreen);
+				neonColorOptionItem = new OptionsMenuElement(getString(R.string.neon_color), Settings.getNeonColor(), this, neonColorStrings, false, colorsScreen);
 				driverSpriteOptionItem = new OptionsMenuElement(getString(R.string.driver_sprite), Settings.isDriverSpriteEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				bikeSpriteOptionItem = new OptionsMenuElement(getString(R.string.bike_sprite), Settings.isBikeSpriteEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				inputOptionItem = new OptionsMenuElement(getString(R.string.input), Settings.getInputOption(), this, keysetStrings, false, optionsMenu);
@@ -431,12 +457,22 @@ public class Menu
 				darkModeOptionItem = new OptionsMenuElement(getString(R.string.dark_mode), Settings.isDarkModeEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				fpsOverlayOptionItem = new OptionsMenuElement(getString(R.string.fps_overlay), Settings.isFpsOverlayEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				clearHighscoreOptionItem = new SimpleMenuElementNew(getString(R.string.clear_highscore), eraseScreen, this);
+				colorsMenuItem = new SimpleMenuElementNew(getString(R.string.colors), colorsScreen, this);
+				copyTrackPresetItem = new SimpleMenuElementNew(getString(R.string.copy_track_preset), trackCopyChooserScreen, this);
+				copyNeonPresetItem = new SimpleMenuElementNew(getString(R.string.copy_neon_preset), neonCopyChooserScreen, this);
+
+				// Colors submenu — single place for every color-related setting.
+				// Track color preset + gradient picker move here; neon color
+				// preset moves out of the main Shadows option and into here as
+				// a separate picker. Two inline copy-into-Custom chooser
+				// screens (track and neon) are wired up below.
+				buildColorsSubmenu();
 
 				// if (hasPointer)
 				//	optionsMenu.addItem(softwareJoystickOptionItem);
 				optionsMenu.addItem(perspectiveOptionItem);
 				optionsMenu.addItem(shadowModeOptionItem);
-				optionsMenu.addItem(trackColorOptionItem);
+				optionsMenu.addItem(colorsMenuItem);
 				optionsMenu.addItem(driverSpriteOptionItem);
 				optionsMenu.addItem(bikeSpriteOptionItem);
 				optionsMenu.addItem(inputOptionItem);
@@ -630,6 +666,156 @@ public class Menu
 
 	public EmptyLineMenuElement createEmptyLine(boolean beforeAction) {
 		return new EmptyLineMenuElement(beforeAction ? 10 : 20);
+	}
+
+	// Construct the Colors submenu and its two inline copy-into-Custom
+	// chooser screens. Track and neon families share the
+	// ChannelMenuElement / ChannelTarget plumbing; the chooser screens
+	// each get three slot ActionMenuElements + Back. The OptionsMenuElement
+	// pickers (track, gradient, neon) are already constructed at this
+	// point — we only add them to colorsScreen here.
+	private void buildColorsSubmenu() {
+		// Track FG channel rows (FG R / G / B).
+		ChannelMenuElement trackFgR = makeTrackChannelRow(getString(R.string.track_fg_r), false, 0);
+		ChannelMenuElement trackFgG = makeTrackChannelRow(getString(R.string.track_fg_g), false, 1);
+		ChannelMenuElement trackFgB = makeTrackChannelRow(getString(R.string.track_fg_b), false, 2);
+		// Track BG channel rows (BG R / G / B).
+		ChannelMenuElement trackBgR = makeTrackChannelRow(getString(R.string.track_bg_r), true, 0);
+		ChannelMenuElement trackBgG = makeTrackChannelRow(getString(R.string.track_bg_g), true, 1);
+		ChannelMenuElement trackBgB = makeTrackChannelRow(getString(R.string.track_bg_b), true, 2);
+		// Neon channel rows (R / G / B).
+		ChannelMenuElement neonR = makeNeonChannelRow(getString(R.string.neon_r), 0);
+		ChannelMenuElement neonG = makeNeonChannelRow(getString(R.string.neon_g), 1);
+		ChannelMenuElement neonB = makeNeonChannelRow(getString(R.string.neon_b), 2);
+
+		colorsScreen.registerTrackRow(trackFgR);
+		colorsScreen.registerTrackRow(trackFgG);
+		colorsScreen.registerTrackRow(trackFgB);
+		colorsScreen.registerTrackRow(trackBgR);
+		colorsScreen.registerTrackRow(trackBgG);
+		colorsScreen.registerTrackRow(trackBgB);
+		colorsScreen.registerNeonRow(neonR);
+		colorsScreen.registerNeonRow(neonG);
+		colorsScreen.registerNeonRow(neonB);
+
+		// Layout: track section, neon section, back. Empty lines separate
+		// groups; matches the visual rhythm of the existing Options screen.
+		colorsScreen.addItem(trackColorOptionItem);
+		colorsScreen.addItem(mapColorGradientOptionItem);
+		colorsScreen.addItem(trackFgR);
+		colorsScreen.addItem(trackFgG);
+		colorsScreen.addItem(trackFgB);
+		colorsScreen.addItem(trackBgR);
+		colorsScreen.addItem(trackBgG);
+		colorsScreen.addItem(trackBgB);
+		colorsScreen.addItem(copyTrackPresetItem);
+		colorsScreen.addItem(createEmptyLine(false));
+		colorsScreen.addItem(neonColorOptionItem);
+		colorsScreen.addItem(neonR);
+		colorsScreen.addItem(neonG);
+		colorsScreen.addItem(neonB);
+		colorsScreen.addItem(copyNeonPresetItem);
+		colorsScreen.addItem(createEmptyLine(true));
+		colorsScreen.addItem(createAction(ActionMenuElement.BACK));
+
+		// Track copy-into-Custom chooser — three slot actions + Back. The
+		// handler in handleAction reads the active track preset, copies its
+		// channels into the chosen slot, switches the active preset to
+		// that slot, and pops back to colorsScreen.
+		trackCopyChooserScreen.addItem(new ActionMenuElement(
+				customSlotStrings[0], ActionMenuElement.COPY_TRACK_INTO_CUSTOM_1, this));
+		trackCopyChooserScreen.addItem(new ActionMenuElement(
+				customSlotStrings[1], ActionMenuElement.COPY_TRACK_INTO_CUSTOM_2, this));
+		trackCopyChooserScreen.addItem(new ActionMenuElement(
+				customSlotStrings[2], ActionMenuElement.COPY_TRACK_INTO_CUSTOM_3, this));
+		trackCopyChooserScreen.addItem(createEmptyLine(true));
+		trackCopyChooserScreen.addItem(createAction(ActionMenuElement.BACK));
+
+		neonCopyChooserScreen.addItem(new ActionMenuElement(
+				customSlotStrings[0], ActionMenuElement.COPY_NEON_INTO_CUSTOM_1, this));
+		neonCopyChooserScreen.addItem(new ActionMenuElement(
+				customSlotStrings[1], ActionMenuElement.COPY_NEON_INTO_CUSTOM_2, this));
+		neonCopyChooserScreen.addItem(new ActionMenuElement(
+				customSlotStrings[2], ActionMenuElement.COPY_NEON_INTO_CUSTOM_3, this));
+		neonCopyChooserScreen.addItem(createEmptyLine(true));
+		neonCopyChooserScreen.addItem(createAction(ActionMenuElement.BACK));
+	}
+
+	// Build a ChannelMenuElement bound to one R/G/B channel of one of
+	// the three Custom track slots' FG or BG color. The active slot is
+	// resolved at click time from Settings.getTrackColorMode() — if the
+	// current preset is a built-in, ChannelTarget.isCurrentPresetCustom()
+	// returns false and enterCopyFlow() takes the user to the chooser
+	// instead of entering edit mode.
+	private ChannelMenuElement makeTrackChannelRow(String label, final boolean isBackground, final int channel) {
+		final ChannelMenuElement.ChannelTarget target = new ChannelMenuElement.ChannelTarget() {
+			@Override
+			public int getValue() {
+				int mode = Settings.getTrackColorMode();
+				int slot = Settings.getTrackCustomSlotIndex(mode);
+				if (slot < 0) {
+					// Built-in preset: surface the read-only ARGB for display
+					// (the row never enters edit mode for these; the value is
+					// just shown so the user can see what they'd copy).
+					int argb = isBackground
+							? Settings.getTrackBackgroundArgb(mode)
+							: Settings.getTrackForegroundArgb(mode);
+					return (argb >> (16 - channel * 8)) & 0xff;
+				}
+				return Settings.getTrackCustomChannel(slot, isBackground, channel);
+			}
+
+			@Override
+			public void setValue(int clamped) {
+				int slot = Settings.getTrackCustomSlotIndex(Settings.getTrackColorMode());
+				if (slot < 0) return; // built-in — should not have entered edit
+				Settings.setTrackCustomChannel(slot, isBackground, channel, clamped);
+			}
+
+			@Override
+			public boolean isCurrentPresetCustom() {
+				return Settings.getTrackCustomSlotIndex(Settings.getTrackColorMode()) >= 0;
+			}
+
+			@Override
+			public void enterCopyFlow() {
+				setCurrentMenu(trackCopyChooserScreen, false);
+			}
+		};
+		return new ChannelMenuElement(label, target);
+	}
+
+	private ChannelMenuElement makeNeonChannelRow(String label, final int channel) {
+		final ChannelMenuElement.ChannelTarget target = new ChannelMenuElement.ChannelTarget() {
+			@Override
+			public int getValue() {
+				int color = Settings.getNeonColor();
+				int slot = Settings.getNeonCustomSlotIndex(color);
+				if (slot < 0) {
+					int argb = Settings.getShadowNeonBaseColor(color);
+					return (argb >> (16 - channel * 8)) & 0xff;
+				}
+				return Settings.getNeonCustomChannel(slot, channel);
+			}
+
+			@Override
+			public void setValue(int clamped) {
+				int slot = Settings.getNeonCustomSlotIndex(Settings.getNeonColor());
+				if (slot < 0) return;
+				Settings.setNeonCustomChannel(slot, channel, clamped);
+			}
+
+			@Override
+			public boolean isCurrentPresetCustom() {
+				return Settings.getNeonCustomSlotIndex(Settings.getNeonColor()) >= 0;
+			}
+
+			@Override
+			public void enterCopyFlow() {
+				setCurrentMenu(neonCopyChooserScreen, false);
+			}
+		};
+		return new ChannelMenuElement(label, target);
 	}
 
 	public int getSelectedLevel() {
@@ -1034,6 +1220,12 @@ public class Menu
 			getGDActivity().menuToGame();
 			return;
 		}
+		// Give the current screen a chance to consume BACK — e.g.
+		// ColorsMenuScreen commits an active channel-row edit and swallows
+		// the press so the screen itself doesn't also pop.
+		if (currentMenu != null && currentMenu.handleBack()) {
+			return;
+		}
 		if (currentMenu != null)
 			setCurrentMenu(currentMenu.getNavTarget(), true);
 	}
@@ -1074,6 +1266,7 @@ public class Menu
 				highscoreHelpScreen, optionsHelpScreen,
 				nameScreen, managerScreen, managerInstalledScreen,
 				managerDownloadScreen, levelScreen,
+				colorsScreen, trackCopyChooserScreen, neonCopyChooserScreen,
 		};
 		for (MenuScreen s : screens) {
 			if (s != null && s.getLayout() != null) {
@@ -1366,8 +1559,9 @@ public class Menu
 			return;
 		}
 		if (item == shadowModeOptionItem) {
-			// Multi-state cycle (Off / Shadow / 6 neon colors): same
-			// _charvZ()-then-advance pattern as controllerAutohideOptionItem.
+			// Tri-state cycle (Off / Shadow / Neon): _charvZ()-then-advance
+			// pattern. Neon hue is decoupled — picked separately via
+			// neonColorOptionItem under the Colors submenu.
 			if (shadowModeOptionItem._charvZ()) {
 				shadowModeOptionItem.setSelectedOption(
 						shadowModeOptionItem.getSelectedOption() + 1);
@@ -1378,8 +1572,9 @@ public class Menu
 			return;
 		}
 		if (item == trackColorOptionItem) {
-			// Multi-state cycle (Original + 8 presets): same
-			// _charvZ()-then-advance pattern as the shadow option.
+			// Multi-state cycle (8 built-ins + 3 Custom slots). On change,
+			// re-pull the 6 track channel rows so they reflect the newly
+			// selected preset's values.
 			if (trackColorOptionItem._charvZ()) {
 				trackColorOptionItem.setSelectedOption(
 						trackColorOptionItem.getSelectedOption() + 1);
@@ -1387,6 +1582,33 @@ public class Menu
 			int mode = trackColorOptionItem.getSelectedOption();
 			getLevelLoader().setTrackColorMode(mode);
 			Settings.setTrackColorMode(mode);
+			if (colorsScreen != null) colorsScreen.refreshTrackRows();
+			return;
+		}
+		if (item == mapColorGradientOptionItem) {
+			// Tri-state cycle (On / Inverted / Off). Same advance pattern.
+			if (mapColorGradientOptionItem._charvZ()) {
+				mapColorGradientOptionItem.setSelectedOption(
+						mapColorGradientOptionItem.getSelectedOption() + 1);
+			}
+			int mode = mapColorGradientOptionItem.getSelectedOption();
+			getLevelLoader().setMapColorGradient(mode);
+			Settings.setMapColorGradient(mode);
+			return;
+		}
+		if (item == neonColorOptionItem) {
+			// 9-state cycle (6 built-in hues + 3 Custom slots). On change,
+			// re-pull the 3 neon channel rows so they reflect the newly
+			// selected hue. Loader mirror so the render path doesn't hit
+			// SharedPreferences per frame.
+			if (neonColorOptionItem._charvZ()) {
+				neonColorOptionItem.setSelectedOption(
+						neonColorOptionItem.getSelectedOption() + 1);
+			}
+			int color = neonColorOptionItem.getSelectedOption();
+			getLevelLoader().setNeonColor(color);
+			Settings.setNeonColor(color);
+			if (colorsScreen != null) colorsScreen.refreshNeonRows();
 			return;
 		}
 		if (item == driverSpriteOptionItem) {
@@ -1465,6 +1687,39 @@ public class Menu
 				if (((ActionMenuElement) item).getActionValue() == ActionMenuElement.BACK) {
 					setCurrentMenu(currentMenu.getNavTarget(), true);
 					return;
+				}
+				{
+					// Copy-into-Custom dispatch. Each slot action snapshots
+					// the current preset's channels into the chosen Custom
+					// slot, switches the active preset to that slot, refreshes
+					// the channel rows, and pops back to the Colors screen.
+					int av = ((ActionMenuElement) item).getActionValue();
+					if (av >= ActionMenuElement.COPY_TRACK_INTO_CUSTOM_1
+							&& av <= ActionMenuElement.COPY_TRACK_INTO_CUSTOM_3) {
+						int slot = av - ActionMenuElement.COPY_TRACK_INTO_CUSTOM_1;
+						int src = Settings.getTrackColorMode();
+						Settings.copyTrackPresetIntoCustom(src, slot);
+						int dstMode = Settings.TRACK_COLOR_CUSTOM_1 + slot;
+						Settings.setTrackColorMode(dstMode);
+						getLevelLoader().setTrackColorMode(dstMode);
+						trackColorOptionItem.setSelectedOption(dstMode);
+						colorsScreen.refreshTrackRows();
+						setCurrentMenu(colorsScreen, false);
+						return;
+					}
+					if (av >= ActionMenuElement.COPY_NEON_INTO_CUSTOM_1
+							&& av <= ActionMenuElement.COPY_NEON_INTO_CUSTOM_3) {
+						int slot = av - ActionMenuElement.COPY_NEON_INTO_CUSTOM_1;
+						int src = Settings.getNeonColor();
+						Settings.copyNeonPresetIntoCustom(src, slot);
+						int dstColor = Settings.NEON_COLOR_CUSTOM_1 + slot;
+						Settings.setNeonColor(dstColor);
+						getLevelLoader().setNeonColor(dstColor);
+						neonColorOptionItem.setSelectedOption(dstColor);
+						colorsScreen.refreshNeonRows();
+						setCurrentMenu(colorsScreen, false);
+						return;
+					}
 				}
 				if (((ActionMenuElement) item).getActionValue() == ActionMenuElement.PLAY_MENU) {
 					levelSelector.setSelectedOption(levelIndex);

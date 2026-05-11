@@ -47,6 +47,16 @@ public class ActionMenuElement
 	public static final int CHANGE_LEVELS_FOLDER = 17;
 	public static final int RESCAN_FOLDER = 18;
 	public static final int REMOVE_FROM_LIST = 19;
+	// Copy-into-Custom action values for the Colors submenu. Six values —
+	// three slots × two families (track / neon). Used as the actionValue
+	// on the ActionMenuElements inside the inline copy chooser screens
+	// built in Menu so {@link Menu#handleAction} can dispatch them.
+	public static final int COPY_TRACK_INTO_CUSTOM_1 = 20;
+	public static final int COPY_TRACK_INTO_CUSTOM_2 = 21;
+	public static final int COPY_TRACK_INTO_CUSTOM_3 = 22;
+	public static final int COPY_NEON_INTO_CUSTOM_1 = 23;
+	public static final int COPY_NEON_INTO_CUSTOM_2 = 24;
+	public static final int COPY_NEON_INTO_CUSTOM_3 = 25;
 
 	protected MenuHandler handler;
 	protected boolean isLocked = false;

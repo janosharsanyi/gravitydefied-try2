@@ -36,15 +36,22 @@ public class Loader {
 
 	private boolean perspectiveEnabled = true;
 	// One of Settings.SHADOW_MODE_*. OFF disables the shadow render entirely;
-	// SHADOW is the original gray fade; NEON_* picks a colored "anti-shadow"
-	// glow under the bike. Default mirrors the old behavior so the field has a
-	// sensible value before Settings is consulted.
+	// SHADOW is the original gray fade; NEON enables a colored "anti-shadow"
+	// glow under the bike whose hue is picked separately via neonColor below.
+	// Default mirrors the old behavior so the field has a sensible value
+	// before Settings is consulted.
 	private int shadowMode = org.happysanta.gd.Settings.SHADOW_MODE_SHADOW;
-	// One of Settings.TRACK_COLOR_*. ORIGINAL falls through to the legacy
-	// single-color track render (matches the bit-for-bit pre-feature look).
-	// Anything else opts in to the new 3-color render (bg line + gradient
-	// across + fg line). Default mirrors pre-feature behavior.
+	// One of Settings.NEON_COLOR_*. Hue picked by the neon glow when
+	// shadowMode == SHADOW_MODE_NEON; ignored otherwise. Mirrored in
+	// Loader so the per-frame render path doesn't hit SharedPreferences.
+	private int neonColor = org.happysanta.gd.Settings.NEON_COLOR_YELLOW;
+	// One of Settings.TRACK_COLOR_*. Picks the FG/BG color pair fed into the
+	// track render; how it's applied is decided by mapColorGradient below.
 	private int trackColorMode = org.happysanta.gd.Settings.TRACK_COLOR_ORIGINAL;
+	// One of Settings.MAP_COLOR_GRADIENT_*. OFF collapses BG onto FG so the
+	// render is single-color in FG. ON keeps the canonical two-color 3-line
+	// render. INVERTED swaps FG/BG.
+	private int mapColorGradient = org.happysanta.gd.Settings.MAP_COLOR_GRADIENT_OFF;
 	private int pointers[][] = new int[3][];
 	private int m_eaI = 0;
 	private int m_faI = 0;
@@ -240,12 +247,9 @@ public class Loader {
 
 	public void _aiIV(GameView j, int k, int i1) {
 		if (j != null) {
-			// Original mode keeps the legacy single-color render: set the
-			// dim green once, Level._aiIV doesn't touch the color again.
-			// Preset modes set their own colors per line type inside the
-			// loop, so we skip the priming setColor here.
-			if (trackColorMode == org.happysanta.gd.Settings.TRACK_COLOR_ORIGINAL)
-				j.setColor(0, 170, 0);
+			// Track-color preset and gradient are read inside Level._aiIV;
+			// every combination sets its own colors per draw via setRawArgb,
+			// so there's nothing to prime here.
 			k >>= 1;
 			i1 >>= 1;
 			levels._aiIV(j, k, i1);
@@ -253,10 +257,6 @@ public class Loader {
 	}
 
 	public void _aiV(GameView j) {
-		// Same as _aiIV: ORIGINAL primes the bright green here; presets
-		// let Level._aiV pick the color (background-only for v1).
-		if (trackColorMode == org.happysanta.gd.Settings.TRACK_COLOR_ORIGINAL)
-			j.setColor(0, 255, 0);
 		levels._aiV(j);
 	}
 
@@ -375,12 +375,28 @@ public class Loader {
 		shadowMode = mode;
 	}
 
+	public int getNeonColor() {
+		return neonColor;
+	}
+
+	public void setNeonColor(int color) {
+		neonColor = color;
+	}
+
 	public int getTrackColorMode() {
 		return trackColorMode;
 	}
 
 	public void setTrackColorMode(int mode) {
 		trackColorMode = mode;
+	}
+
+	public int getMapColorGradient() {
+		return mapColorGradient;
+	}
+
+	public void setMapColorGradient(int mode) {
+		mapColorGradient = mode;
 	}
 
 	public boolean isPerspectiveEnabled() {
