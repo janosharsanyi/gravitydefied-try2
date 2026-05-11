@@ -488,7 +488,12 @@ public class Settings {
 
 	public static int getMapColorGradient() {
 		int mode = preferences.getInt(MAP_COLOR_GRADIENT, MAP_COLOR_GRADIENT_DEFAULT);
-		if (mode < MAP_COLOR_GRADIENT_ON || mode > MAP_COLOR_GRADIENT_OFF)
+		// Valid range is OFF..INVERTED (0..2). The pre-existing check
+		// compared against OFF as if it were the upper bound, which made
+		// every stored value other than OFF clamp back to the default —
+		// the visible symptom was Gradient / Reversed appearing to revert
+		// to Solid every time the menu re-read the setting.
+		if (mode < MAP_COLOR_GRADIENT_OFF || mode > MAP_COLOR_GRADIENT_INVERTED)
 			return MAP_COLOR_GRADIENT_DEFAULT;
 		return mode;
 	}
