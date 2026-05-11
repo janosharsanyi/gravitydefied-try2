@@ -26,18 +26,9 @@ public class Request {
 	private AsyncRequestTask task;
 	private String apiURL;
 
-	public Request(String method, List<NameValuePair> params, ResponseHandler handler, boolean useDebugURL) {
-		construct(method, params, handler, useDebugURL ? API.DEBUG_URL : API.URL);
-	}
-
 	public Request(String method, List<NameValuePair> params, ResponseHandler handler) {
-		construct(method, params, handler, API.URL);
-	}
+		this.apiURL = API.URL;
 
-	private void construct(String method, List<NameValuePair> params, ResponseHandler handler, String apiURL) {
-		this.apiURL = apiURL;
-
-		params.add(new NameValuePair("v", String.valueOf(API.VERSION)));
 		params.add(new NameValuePair("method", method));
 		params.add(new NameValuePair("app_version", getAppVersion()));
 		params.add(new NameValuePair("app_lang", Locale.getDefault().getDisplayLanguage()));

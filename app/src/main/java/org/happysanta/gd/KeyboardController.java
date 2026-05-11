@@ -1,15 +1,11 @@
 package org.happysanta.gd;
 
 import android.graphics.Rect;
-import android.util.Log;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.LinearLayout;
 import org.happysanta.gd.Game.GameView;
-
-import java.text.SimpleDateFormat;
-import java.util.Calendar;
 
 import static org.happysanta.gd.Helpers.getDp;
 
@@ -33,7 +29,6 @@ public class KeyboardController {
 	private int[] buf;
 	private LinearLayout[] btns;
 	private PointerInfo[] pointers;
-	private StringBuffer logBuffer;
 	/**
 	 * Default touch handler used when a view registers via the legacy
 	 * {@code setOnTouchListener(keyboardController)} pattern — assumes a
@@ -55,7 +50,6 @@ public class KeyboardController {
 			pointers[i] = new PointerInfo(i);
 		}
 
-		logBuffer = new StringBuffer();
 		defaultHandler = new ClusterTouchHandler(FULL_GRID);
 	}
 
@@ -244,58 +238,6 @@ public class KeyboardController {
 
 			return true;
 		}
-	}
-
-	private synchronized void log(Object o, boolean last) {
-		String logStr = o.toString();
-		Log.d("GD Keyboard", o.toString());
-
-		if (last)
-			Log.d("", "");
-	}
-
-	private void log(Object o) {
-		log(o, false);
-	}
-
-	public synchronized void clearLogBuffer() {
-		logBuffer = null;
-		logBuffer = new StringBuffer();
-	}
-
-	public String getLog() {
-		return logBuffer.toString();
-	}
-
-	private static String getCurrentTime() {
-		Calendar cal = Calendar.getInstance();
-		cal.getTime();
-		SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss");
-		return sdf.format(cal.getTime());
-	}
-
-	private static String actionToString(int action) {
-		switch (action) {
-			case MotionEvent.ACTION_DOWN:
-				return "ACTION_DOWN";
-			case MotionEvent.ACTION_POINTER_DOWN:
-				return "ACTION_POINTER_DOWN";
-			case MotionEvent.ACTION_POINTER_2_DOWN:
-				return "ACTION_POINTER_2_DOWN";
-			case MotionEvent.ACTION_POINTER_2_UP:
-				return "ACTION_POINTER_2_UP";
-			case MotionEvent.ACTION_POINTER_3_DOWN:
-				return "ACTION_POINTER_3_DOWN";
-			case MotionEvent.ACTION_POINTER_3_UP:
-				return "ACTION_POINTER_3_UP";
-			case MotionEvent.ACTION_UP:
-				return "ACTION_UP";
-			case MotionEvent.ACTION_POINTER_UP:
-				return "ACTION_POINTER_UP";
-			case MotionEvent.ACTION_MOVE:
-				return "ACTION_MOVE";
-		}
-		return "?";
 	}
 
 	private static int gameKeyCode(int btnIndex) {

@@ -321,9 +321,6 @@ public class Settings {
 	// and dark backgrounds.
 	private static final int MENU_HIGHLIGHT_COLOR = 0xff00a000;
 
-	private static final String LAST_SEND_STATS = "last_send_stats";
-	private static final long LAST_SEND_STATS_DEFAULT = 0;
-
 	private static final String NAME = "name";
 	public static final String NAME_DEFAULT = "AAA";
 	public static final byte[] NAME_CHARS_DEFALUT = new byte[]{65, 65, 65};
@@ -845,14 +842,6 @@ public class Settings {
 
 	public static void setInputOption(int value) {
 		setInt(INPUT_OPTION, value);
-	}
-
-	public static long getLastSendStats() {
-		return preferences.getLong(LAST_SEND_STATS, LAST_SEND_STATS_DEFAULT);
-	}
-
-	public static void setLastSendStats(long value) {
-		setLong(LAST_SEND_STATS, value);
 	}
 
 	public static API.LevelsSortType getLevelsSort() {

@@ -1,17 +1,13 @@
 package org.happysanta.gd.API;
 
-import java.io.*;
+import java.io.FileOutputStream;
 import java.util.LinkedList;
 import java.util.List;
-
-import static org.happysanta.gd.Helpers.getDeviceName;
 
 public class API {
 
 	public static final String URL = "http://gdtr.net/api.php";
-	public static final String DEBUG_URL = "http://dev.gdtr.net/api.php";
 	public static final String MRG_URL = "http://gdtr.net/mrg/%d.mrg";
-	public static final int VERSION = 2;
 
 	public static Request getLevels(int offset, int limit, LevelsSortType sort, ResponseHandler handler)
 			throws Exception {
@@ -21,27 +17,6 @@ public class API {
 		params.add(new NameValuePair("limit", String.valueOf(limit)));
 
 		return new Request("getLevels", params, handler);
-	}
-
-	public static Request getNotifications(boolean installedFromAPK, ResponseHandler handler) {
-		List<NameValuePair> params = new LinkedList<NameValuePair>();
-		params.add(new NameValuePair("apk", String.valueOf(installedFromAPK ? 1 : 0)));
-		return new Request("getNotifications", params, handler);
-	}
-
-	public static Request sendStats(String statsJSON, String installationID, int useCheats, ResponseHandler handler) {
-		List<NameValuePair> params = new LinkedList<NameValuePair>();
-		params.add(new NameValuePair("stats", statsJSON));
-		params.add(new NameValuePair("id", installationID));
-		params.add(new NameValuePair("use_cheats", String.valueOf(useCheats)));
-		return new Request("sendStats", params, handler);
-	}
-
-	public static Request sendKeyboardLogs(String log, ResponseHandler handler) {
-		List<NameValuePair> params = new LinkedList<NameValuePair>();
-		params.add(new NameValuePair("log", log));
-		params.add(new NameValuePair("device", getDeviceName()));
-		return new Request("sendKeyboardLogs", params, handler, true);
 	}
 
 	public static DownloadFile downloadMrg(long id, FileOutputStream output, DownloadHandler handler) {

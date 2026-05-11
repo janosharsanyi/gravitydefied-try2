@@ -48,6 +48,26 @@ Platform API replacements
   where appropriate.
 - Replaced removed org.apache.http.* networking calls with HttpURLConnection.
 
+Network calls
+- Outbound API surface narrowed to what the user explicitly initiates: the
+  level browser ("Download levels" → API.getLevels) and the per-level .mrg
+  download (API.downloadMrg). The remaining three upstream endpoints, all
+  of which fired without user action, were dropped:
+    * getNotifications — fetched on every cold start; could pop a
+      server-supplied dialog and open a server-supplied URL.
+    * sendStats — posted a per-installation UUID plus per-level completion
+      stats on a timer.
+    * sendKeyboardLogs — debug-only menu item that posted the touch-input
+      log buffer with the device manufacturer/model string.
+  The companion plumbing went with them: the Installation UUID generator
+  (org.happysanta.gd.Installation, originally org.acra.util.Installation),
+  the last_send_stats preference, the keyboard-log buffer in
+  KeyboardController, the dev.gdtr.net debug endpoint, and the API
+  version-handshake parameter. Motivation is twofold: no app data leaves
+  the device unless the player asks for a level list or a download, and
+  the upstream-operated gdtr.net endpoint (we don't run it) only sees
+  requests that actually deliver content to the user.
+
 Input
 - Added physical gamepad / controller support
   (org.happysanta.gd.ControllerInputHandler): d-pad, left stick, A/B,
@@ -158,6 +178,20 @@ Gameplay visuals
   Yellow / Lime / Blue / Gray / Black/White. Black/White is theme-aware
   (foreground white in dark mode, black in light mode; background
   always darker than foreground).
+- Perspective-mode area fill added: configurable fill for the region
+  between the ground contour and the raised perspective projection.
+  Five modes — Off (default; wireframe, preserves upstream visual) /
+  Foreground / Background / Third (a curated per-preset color, editable
+  R/G/B for Custom slots) / Gradient (foreground→background strip-fill
+  matching the across-tick interpolation direction). Implemented as an
+  allocation-free path render in GameView (reused Path / Paint; gradient
+  uses 6 trapezoidal strips with colors pre-interpolated via the same
+  interpArgb path the across ticks already use, so no shader and no
+  per-frame allocation in the hot path). Independently, the across-tick
+  ribs are now togglable via a new "Across ticks" option (On default,
+  preserves upstream visual) so the user can pick wireframe / fill only /
+  ribbed-over-fill combinations.
+
 - Map color gradient option added (Solid / Gradient / Reversed) —
   applies to every preset including Original. Solid ignores the
   background color and draws every line of the render in foreground

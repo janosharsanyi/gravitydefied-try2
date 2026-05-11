@@ -573,27 +573,6 @@ public class LevelsManager {
 		return dataSource.getAllLevels().toArray(new Level[0]);
 	}
 
-	public synchronized HashMap<String, Double> getLevelsStat() {
-		Level[] levels = getAllInstalledLevels();
-		HashMap<String, Double> stat = new HashMap<>();
-		if (levels.length > 0) {
-			for (Level level : levels) {
-				int[] completed = level.getUnlockedAll();
-				int completedCount = 0;
-				for (int i = 0; i < completed.length; i++) {
-					if (completed[i] < 0) completed[i] = 0;
-					completedCount += completed[i];
-				}
-
-				double totalCount = level.getCountEasy() + level.getCountMedium() + level.getCountHard();
-				double per = completedCount / totalCount * 100;
-
-				stat.put(String.valueOf(level.getApiId()), per);
-			}
-		}
-		return stat;
-	}
-
 	public void delete(Level level) {
 		// If the user is deleting the currently-active level (today only
 		// reachable via the "remove missing level" flow — the normal Delete

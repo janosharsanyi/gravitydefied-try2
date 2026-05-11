@@ -42,7 +42,6 @@ public class ActionMenuElement
 	public static final int SELECT_FILE = 12;
 	public static final int DELETE = 13;
 	public static final int RESTART_WITH_NEW_LEVEL = 14;
-	public static final int SEND_LOGS = 15;
 	public static final int OPEN_LEVELS_FOLDER = 16;
 	public static final int CHANGE_LEVELS_FOLDER = 17;
 	public static final int RESCAN_FOLDER = 18;

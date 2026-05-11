@@ -406,10 +406,6 @@ public class Menu
 				mainMenu.addItem(new SimpleMenuElementNew(getString(R.string.options), optionsMenu, this));
 				mainMenu.addItem(new SimpleMenuElementNew(getString(R.string.help), helpMenu, this));
 				mainMenu.addItem(aboutMenuItem);
-				if (Global.DEBUG) {
-					// mainMenu.addItem(createAction(ActionMenuElement.RESTART_WITH_NEW_LEVEL));
-					mainMenu.addItem(createAction(ActionMenuElement.SEND_LOGS));
-				}
 				mainMenu.addItem(createAction(ActionMenuElement.EXIT));
 
 				levelSelector = new OptionsMenuElement(getString(R.string.level), level.getSelectedLevel(), this, difficultyLevels, false, playMenu);
@@ -651,10 +647,6 @@ public class Menu
 
 			case ActionMenuElement.RESTART_WITH_NEW_LEVEL:
 				r = R.string.restart_with_new_level;
-				break;
-
-			case ActionMenuElement.SEND_LOGS:
-				r = R.string.send_logs;
 				break;
 
 			default:
@@ -1645,9 +1637,6 @@ public class Menu
 					LevelsManager manager = gd.levelsManager;
 					long nextId = manager.getCurrentId() == 1 ? 2 : 1;
 					gd.levelsManager.load(manager.getLeveL(nextId));
-				}
-				if (((ActionMenuElement) item).getActionValue() == ActionMenuElement.SEND_LOGS) {
-					gd.sendKeyboardLogs();
 				}
 				if (((ActionMenuElement) item).getActionValue() == ActionMenuElement.SELECT_FILE) {
 					installFromFileBrowse();

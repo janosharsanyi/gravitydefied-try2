@@ -1,7 +1,6 @@
 package org.happysanta.gd;
 
 import android.app.AlertDialog;
-import android.app.ProgressDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Rect;
@@ -25,7 +24,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import org.happysanta.gd.API.*;
 import org.happysanta.gd.Game.*;
 import org.happysanta.gd.Levels.Loader;
 import org.happysanta.gd.Menu.Views.MenuHelmetView;
@@ -36,9 +34,6 @@ import org.happysanta.gd.Menu.Views.MenuTitleLinearLayout;
 import org.happysanta.gd.Menu.Views.ObservableScrollView;
 import org.happysanta.gd.Storage.LevelsManager;
 import org.happysanta.gd.Storage.LevelStorage;
-// Installation is in this same package (org.happysanta.gd) — no import needed.
-// Originally org.acra.util.Installation, replaced when ACRA was dropped.
-import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -46,7 +41,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
-import java.util.HashMap;
 
 import static org.happysanta.gd.Helpers.logDebug;
 
@@ -230,80 +224,6 @@ public class GDActivity extends ComponentActivity implements Runnable {
         if (Helpers.isSDK10OrLower()) {
             isNormalAndroid = false;
         }
-
-        final GDActivity self = this;
-        Request request = API.getNotifications(Global.INSTALLED_FROM_APK, new ResponseHandler() {
-            @Override
-            public void onResponse(final Response apiResponse) {
-                try {
-                    final NotificationsResponse response = new NotificationsResponse(apiResponse);
-                    if (!response.isEmpty()) {
-                        final Runnable onOk = new Runnable() {
-                            @Override
-                            public void run() {
-                                if (response.hasURL()) {
-                                    String url = response.getURL();
-                                    try {
-                                        Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                                        startActivity(browserIntent);
-                                    } catch (Exception e) {
-                                        e.printStackTrace();
-                                    }
-                                }
-                            }
-                        };
-
-                        if (response.hasTwoButtons()) {
-                            AlertDialog.Builder alert = Helpers.makeAlertBuilder(self)
-                                    .setTitle(response.getTitle())
-                                    .setMessage(response.getMessage())
-                                    .setPositiveButton(response.getOKButton(), new DialogInterface.OnClickListener() {
-                                        @Override
-                                        public void onClick(DialogInterface dialog, int which) {
-                                            onOk.run();
-                                        }
-                                    })
-                                    .setNegativeButton(response.getCancelButton(), new DialogInterface.OnClickListener() {
-                                        @Override
-                                        public void onClick(DialogInterface dialog, int which) {
-                                        }
-                                    })
-                                    .setOnCancelListener(new DialogInterface.OnCancelListener() {
-                                        @Override
-                                        public void onCancel(DialogInterface dialog) {
-
-                                        }
-                                    });
-                            alert.show();
-                        } else {
-                            AlertDialog alertDialog = Helpers.makeAlertBuilder(self)
-                                    .setTitle(response.getTitle())
-                                    .setMessage(response.getMessage())
-                                    .setPositiveButton(response.getOKButton(), new DialogInterface.OnClickListener() {
-                                        @Override
-                                        public void onClick(DialogInterface dialog, int which) {
-                                            onOk.run();
-                                        }
-                                    })
-                                    .setOnCancelListener(new DialogInterface.OnCancelListener() {
-                                        @Override
-                                        public void onCancel(DialogInterface dialog) {
-                                        }
-                                    })
-                                    .create();
-                            alertDialog.show();
-                        }
-                    }
-                } catch (Exception e) {
-                    // e.printStackTrace();
-                }
-            }
-
-            @Override
-            public void onError(APIException error) {
-
-            }
-        });
 
         if (true) {
             gameView = new GameView(this);
@@ -621,9 +541,6 @@ public class GDActivity extends ComponentActivity implements Runnable {
 
                 physEngine = new Physics(levelLoader);
                 gameView.setPhysicsEngine(physEngine);
-
-                // logDebug(levelsManager.getLevelsStat());
-                sendStats();
 
 				/* synchronized (Thread.currentThread()) {
 					Thread.currentThread().notify();
@@ -1886,8 +1803,6 @@ public class GDActivity extends ComponentActivity implements Runnable {
         menuToGameUpdateUi();
         updateBackCallbackEnabled();
 
-        keyboardController.clearLogBuffer();
-
         // Defensive resync: re-fire the merged input path so the physics
         // engine's stored _aIIVAnalog flags match the user's currently-held
         // digital keys at the moment we resume ticking _dovI. Idempotent
@@ -2048,73 +1963,6 @@ public class GDActivity extends ComponentActivity implements Runnable {
         Intent restart = new Intent(getApplicationContext(), GDActivity.class);
         restart.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         getApplicationContext().startActivity(restart);
-    }
-
-    private void sendStats() {
-        long lastTs = Settings.getLastSendStats();
-        Helpers.logDebug("sendStats: lastTs = " + lastTs);
-        if (lastTs == 0) {
-            Helpers.logDebug("sendStats: set it to current ts and return");
-            Settings.setLastSendStats(Helpers.getTimestamp());
-            return;
-        }
-
-        // if (Helpers.getTimestamp() < lastTs + 3600 * 8) {
-        if (Helpers.getTimestamp() < lastTs + 10) {
-            Helpers.logDebug("sendStats: just return");
-            return;
-        }
-
-        final GDActivity self = this;
-        Thread statsThread = new Thread() {
-            @Override
-            public void run() {
-                try {
-                    HashMap<String, Double> stats = levelsManager.getLevelsStat();
-
-                    JSONObject statsJSON = new JSONObject(stats);
-                    String id = Installation.id(self);
-                    int useCheats = org.happysanta.gd.Menu.Menu.isNameCheat(Settings.getName()) ? 1 : 0;
-
-                    API.sendStats(statsJSON.toString(), id, useCheats, new ResponseHandler() {
-                        @Override
-                        public void onResponse(Response response) {
-                            Helpers.logDebug("send stats OK");
-                            Settings.setLastSendStats(Helpers.getTimestamp());
-                        }
-
-                        @Override
-                        public void onError(APIException error) {
-                            Helpers.logDebug("send stats error: " + error.getMessage());
-                            // logDebug(error);
-                            // error.printStackTrace();
-                        }
-                    });
-                } catch (Exception e) {
-                    Helpers.logDebug("send stats exception: " + e.getMessage());
-                    // e.printStackTrace();
-                }
-            }
-        };
-        statsThread.start();
-    }
-
-    public void sendKeyboardLogs() {
-        final ProgressDialog progressDialog = ProgressDialog.show(this, getString(R.string.please_wait), getString(R.string.please_wait), true);
-        API.sendKeyboardLogs(keyboardController.getLog(), new ResponseHandler() {
-            @Override
-            public void onResponse(Response response) {
-                progressDialog.dismiss();
-                keyboardController.clearLogBuffer();
-                Helpers.showAlert(getString(R.string.ok), "Done", null);
-            }
-
-            @Override
-            public void onError(APIException error) {
-                progressDialog.dismiss();
-                Helpers.showAlert(getString(R.string.error), "Unable to send logs. Maybe log is empty?", null);
-            }
-        });
     }
 
     private class ButtonCoords {

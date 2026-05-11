@@ -11,7 +11,7 @@
     entry covers gdtr.net, dev.gdtr.net, static.gdtr.net, and anything
     future.
 
-    See API/API.java for the URLs (URL, DEBUG_URL, MRG_URL).
+    See API/API.java for the URLs (URL, MRG_URL).
 -->
 <network-security-config>
     <domain-config cleartextTrafficPermitted="true">
