@@ -131,20 +131,110 @@ Display
   unaffected) via WindowInsetsControllerCompat with
   BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE so users can swipe to peek the bar
   back. Default off.
-- Added optional "Dark mode" (AMOLED-friendly): flips menu chrome and
-  in-game sky to pitch black with white text, tints system bar icons to
-  stay readable. Single source of truth via Settings.getMenuBgColor /
-  getMenuFgColor / getMenuItemColorStateList; the static
-  R.drawable.menu_item_color selector was replaced with a programmatic
-  ColorStateList that follows the toggle. In-game render path also
-  participates: GameView.setColor() inverts structural near-black inputs
-  (flag poles, line wheels, driver body lines) to a soft light-gray;
-  sprite wheels are tinted via a cached ColorMatrixColorFilter; on-screen
-  keypad row backgrounds and digit text pull from Settings so they flip
-  with the toggle. Default off.
+- Added "Sky" theme system (replaces the previous binary "Dark mode"
+  toggle): picks the colors painted as the in-game sky and the menu
+  chrome background. Each preset is a *theme* defined by a primary
+  and a secondary ARGB; built-in presets pair each primary with a
+  curated complementary secondary so LINEAR / CENTRAL gradient
+  modes read as natural atmospheric transitions (twilight, sunset,
+  dawn, etc.) instead of a solid wash. 16 built-in options — Black, Dark gray, Dark
+  teal, Mid teal, Blue, Indigo, Forest, Burgundy, Light teal, Cyan,
+  Sky blue, Lavender, Salmon, Mint, Light gray, White — plus 3
+  user-editable Custom slots (Custom 1/2/3) that each store
+  independent primary R/G/B and secondary R/G/B (6 channels per
+  slot, same pattern as Track and Neon Custom slots). Built-in
+  palette is split 8 dark / 8 light, curated as dark↔light pairs
+  (Black↔White, Dark gray↔Light gray, teals, Blue↔Sky blue, Indigo↔
+  Lavender, Forest↔Mint, Burgundy↔Salmon) and grouped darker-to-
+  lighter top to bottom. A separate
+  "Sky gradient" mode picker (6 options — Solid / Secondary / Linear
+  / Reverse linear / Central / Reverse central) controls how primary
+  and secondary combine in the in-game sky: Solid paints primary
+  only (default — matches upstream), Secondary paints secondary
+  only, Linear/Reverse Linear paint a vertical gradient between
+  primary and secondary, Central/Reverse Central paint a radial
+  gradient centered on the screen. Built-in presets render
+  identically across all gradient modes (primary = secondary);
+  Custom slots are where gradient modes become visually distinct.
+  The in-game sky paint is built via a strategy dispatch in
+  GameView with a lazy Paint+Shader cache keyed on (mode, primary,
+  secondary, width, height) — no per-frame allocation, shader
+  rebuilt only on user setting change or rotation. The dispatch
+  shape is deliberately extensible: a future "image background"
+  mode would slot in as one additional case loading a Bitmap.
+  The "is the sky dark?" classification consumed by every dark-
+  aware render/chrome path (sprite tint, BW track contrast, HUD
+  progress bar, system bar icon tint, AlertDialog Material Dark
+  theme, on-screen keypad row tinting) is now derived from the
+  chosen sky preset's *primary* BT.601 luma — keys off primary
+  (not secondary) so the chrome doesn't flicker when only the
+  gradient mode changes. Menu chrome stays *solid* (always paints
+  primary only — no gradient on menu screens) for legibility; the
+  gradient is a scenery feature that belongs behind the demo /
+  gameplay only. Menu text stays pure white on any "dark" sky and
+  pure black on any "light" sky for maximum contrast. Single
+  source of truth via Settings.getMenuBgColor / getMenuFgColor /
+  getMenuItemColorStateList; the static R.drawable.menu_item_color
+  selector was replaced with a programmatic ColorStateList that
+  follows the selector. In-game render path also participates:
+  GameView.setColor() lifts structural near-black inputs (line
+  wheels, driver body lines) toward a soft light gray
+  via a brighten ramp when the sky is dark; sprite wheels are
+  tinted via a cached ColorMatrixColorFilter that brightens dark
+  source pixels toward a target offset while leaving AA edges
+  intact; on-screen keypad row backgrounds and digit text pull
+  from Settings so they follow the selector. Default White +
+  Solid gradient — preserves upstream's light look bit-for-bit.
+  Legacy dark_mode_enabled pref is migrated once on first run
+  after upgrade (true → Black, false → White). A separate "Bike
+  tint" option (Colors → Bike submenu) overrides the auto-derived
+  default for the bike — 19 options grouped as Auto / Natural /
+  4 grayscale (Dark / Medium / Light / White) / 10 colored (Red /
+  Orange / Gold / Green / Teal / Cyan / Blue / Purple / Magenta /
+  Pink, ordered around the color wheel) / 3 Custom slots
+  (user-editable RGB). The
+  brighten formula generalizes from a single grayscale offset to a
+  per-channel target — the same matrix shape lifts blacks toward
+  any color while leaving AA edges near-white, so colored tints
+  read as a tinted silhouette rather than a wash. Both render
+  paths consume the same Settings.getBikeTintRgb() so the sprited
+  bike (ColorMatrix on the wheel bitmap) and the line-art bike
+  (per-channel slope+offset in setColor's near-black branch) stay
+  visually consistent — picking Red tints both. Start and finish
+  flag poles get their own independent color settings under a new
+  Colors → Flags sub-screen, each with the same shape as Bike tint
+  (Auto + 15 built-in hues — 3 neutrals plus 12 chromatic walking
+  the color wheel from Red through Brown — plus 3 user-editable
+  Custom slots, per pole).
+  Flag poles bypass setColor()'s near-black branch — they paint
+  directly via paint.setColor(Settings.getStartFlagArgb()) so the
+  user's Bike tint choice no longer bleeds into the structural pole
+  lines (a Red bike no longer turns the flag poles red). Auto
+  preserves the upstream "structural line" behavior, following
+  Settings.getMenuFgColor(). The Colors submenu is itself
+  organized into four sub-screens — Track, Bike, Sky, Flags —
+  each holding the preset picker, gradient/fill options where
+  applicable, the per-channel RGB editors for Custom slots, and an
+  inline copy-into-Custom chooser that snapshots the active preset's
+  channels into the picked slot and switches to it.
+- Splash screen logo PNGs (codebrew.png, gd.png across mdpi / hdpi /
+  xhdpi) re-encoded with proper alpha. Upstream's PNGs were opaque
+  white rectangles with the black artwork drawn on top — the surround
+  pixels were RGB (255,255,255) at alpha 255 (or no alpha channel at
+  all in the RGB-mode files). This presented the brand marks inside a
+  visible white "card" against the sky-themed backdrop in light themes,
+  and a black card in dark themes (the splash invert filter flipped
+  the white surround to black along with the artwork). The PNGs are
+  now true black-on-transparent with alpha derived from per-pixel
+  luminance (`alpha = 255 - min(r,g,b)`) so antialiased edges blend
+  cleanly into whatever sky color sits behind them. The splash render
+  code itself is unchanged: the loading backdrop still tracks
+  `Settings.getMenuBgColor()` and `getSplashInvertPaint()` still
+  inverts the (now alpha-shaped) artwork to white when dark mode is
+  on, so legibility is preserved on dark themes.
 - AlertDialog construction routed through a single Helpers.makeAlertBuilder
   helper that wraps the context with Theme.Material.Dialog.Alert when the
-  app's Dark mode is on, so system dialogs (load-confirm, score-reset,
+  chosen sky classifies as dark, so system dialogs (load-confirm, score-reset,
   download prompts, sort picker, etc.) follow the app theme instead of
   inheriting the activity's legacy light NoTitleBar theme.
 - Added optional "Show FPS" diagnostic overlay: top-right corner of the
@@ -188,7 +278,9 @@ Gameplay visuals
   uses N trapezoidal strips with colors pre-interpolated via the same
   interpArgb path the across ticks already use, so no shader and no
   per-frame allocation in the hot path). N is exposed as a "Gradient
-  steps" option (2/3/4/6/8/12, default 6) and drives the across-tick
+  steps" option (2/3/4/6/8/12, default 12 — the smoothest band count
+  on the list; lower values are still selectable for chunkier banding
+  or perf-constrained devices) and drives the across-tick
   rib subdivision count too so the rib's color steps stay aligned with
   the strip boundaries regardless of setting. Independently, the
   across-tick ribs are togglable via a new "Across ticks" option (On
@@ -210,10 +302,12 @@ Gameplay visuals
   still reachable via Original + Gradient.
 
 - Colors submenu added under Options consolidating every color-related
-  setting in one place: Track color preset (now 8 built-ins + 3
-  user-editable Custom slots), Map color gradient toggle, six in-place
+  setting in one place: Track color preset (now 10 built-ins + 3
+  user-editable Custom slots — adds Orange and Magenta to round out
+  the warm/cool spectrum), Map color gradient toggle, six in-place
   editable RGB channel rows (FG R/G/B + BG R/G/B) for the active track
-  preset, Neon color preset (6 built-in hues + 3 Custom slots), three
+  preset, Neon color preset (8 built-in hues + 3 Custom slots — adds
+  Orange between Yellow and Red, plus White for a universal glow), three
   in-place editable RGB rows for the active neon preset, and two
   "Copy preset into Custom…" actions that snapshot the active preset's
   channels into a chosen Custom slot. Editing on a channel row uses an
@@ -226,6 +320,22 @@ Gameplay visuals
   identically; the Colors screen overrides UP/DOWN routing locally so
   digit cycling reaches the highlighted row while in edit mode without
   losing list navigation otherwise.
+
+- OptionsMenuElement gained an opt-in list-picker mode for long
+  cycles. The class already constructed an auto-generated subscreen
+  with one row per option (used previously only as a fallback);
+  setting useListPicker=true wires KEY_FIRE to push that subscreen
+  with the current value pre-highlighted instead of cycling
+  selection in-place. LEFT/RIGHT keep the in-place nudge for
+  power-user one-shots. Enabled on the three long-cycle pickers
+  (Track 13, Neon 11, Sky 19 options) where cycling past every
+  option was tedious; short cycles (≤6 options like gradient mode,
+  fill mode, stick layout, on/off toggles) stay in-place where the
+  cycle is faster than a screen push/pop. Parent click handlers
+  remain unchanged — _charvZ() returns false in list mode so the
+  handler reads the freshly-picked value and runs its side effects
+  (Settings.setX, applyDarkMode, refresh channel rows) without
+  advancing the cycle.
 
 Other
 - Cosmetic / clarity comments added at sites where an API change forced a

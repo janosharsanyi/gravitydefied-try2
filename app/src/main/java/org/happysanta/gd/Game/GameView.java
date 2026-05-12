@@ -110,20 +110,14 @@ public class GameView extends View {
 	private Timer timer;
 	private Command menuCommand;
 	private Paint paint = new Paint();
-	// Cached Paint with a colour-matrix filter that inverts RGB channels and
-	// caps the result at 0xAA. Used to tint mostly-black sprite assets (bike
-	// wheels) so they read against the dark-mode sky. Built lazily on first
-	// use; settings flips between this and {@code null} via {@link
-	// #getSpriteTintPaint()}.
-	private Paint darkSpritePaint;
 	// Cached Paint with a multiplicative dim filter (~70%) for sprite bike
 	// parts that already carry their own colors (engine, fender, steering).
-	// Unlike {@link #darkSpritePaint} this preserves hue — it just lowers the
-	// brightness so the parts don't pop too hard against the dark sky.
+	// Preserves hue — just lowers brightness so the parts don't pop too
+	// hard against the dark sky.
 	private Paint darkBikePartPaint;
 	// Cached Paint with a full RGB invert (no cap). Used for the splash
 	// logos in dark mode so the original black-on-white art renders as
-	// white-on-black — the muted-gray cap on {@link #darkSpritePaint} left
+	// white-on-black — the muted-gray cap on the bike-tint Paints left
 	// the logo text too faint to read.
 	private Paint darkSplashInvertPaint;
 	private Object m_ocObject;
@@ -335,32 +329,96 @@ public class GameView extends View {
 	}
 
 	/**
-	 * Returns a cached Paint that inverts a sprite's RGB channels and caps
-	 * each at 0xAA, or {@code null} when dark mode is off (so callers can
-	 * pass it straight to {@link #drawBitmap(Bitmap, float, float, Canvas,
+	 * Returns a cached Paint that recolors a sprite (mostly-black bike
+	 * wheels), or {@code null} for natural rendering (so callers can pass
+	 * it straight to {@link #drawBitmap(Bitmap, float, float, Canvas,
 	 * Paint)} without branching).
 	 *
-	 * <p>The matrix maps black (0,0,0) → (170,170,170) so dark wheel pixels
-	 * become a muted mid-gray, and white → black so any highlights flip
-	 * symmetrically. Cached because the colour matrix and filter would
-	 * otherwise allocate every frame inside the render loop.
+	 * <p>Driven by the {@link Settings#getBikeTint()} preference:
+	 * <ul>
+	 *   <li>{@code AUTO} — preserves upstream behavior: {@code null} in
+	 *       light mode (bike renders as the original mostly-black sprite),
+	 *       inverted-gray matrix in dark mode so the wheels stay legible
+	 *       against the dark sky.</li>
+	 *   <li>{@code NATURAL} — always {@code null} regardless of dark mode.</li>
+	 *   <li>{@code DARK / MEDIUM / LIGHT / WHITE} — applies a brighten
+	 *       color matrix unconditionally, with the offset choosing where
+	 *       a black source pixel maps in the output (85 / 128 / 170 / 255).
+	 *       The slope is set so source=255 maps to output=255, i.e. the
+	 *       matrix only lifts blacks toward the target while leaving any
+	 *       bright pixels (AA edges, sprite highlights) unchanged. WHITE
+	 *       collapses the slope to zero, painting the wheel as a solid
+	 *       white silhouette.</li>
+	 * </ul>
+	 *
+	 * <p>The Paints are cached per-offset because the color matrix and
+	 * filter would otherwise allocate every frame inside the render loop.
 	 */
 	private Paint getSpriteTintPaint() {
-		if (!Settings.isDarkModeEnabled()) {
-			return null;
-		}
-		if (darkSpritePaint == null) {
-			darkSpritePaint = new Paint();
-			darkSpritePaint.setFilterBitmap(true);
-			ColorMatrix m = new ColorMatrix(new float[]{
-					-0.7f, 0,    0,    0, 170,
-					0,    -0.7f, 0,    0, 170,
-					0,     0,   -0.7f, 0, 170,
-					0,     0,    0,    1,   0,
-			});
-			darkSpritePaint.setColorFilter(new ColorMatrixColorFilter(m));
-		}
-		return darkSpritePaint;
+		int rgb = Settings.getBikeTintRgb();
+		if (rgb < 0) return null;
+		return lazyBikeTintPaint(rgb);
+	}
+
+	// Single-slot lazy Paint cache keyed on the packed 0xRRGGBB tint
+	// target. Rebuilt only when the user changes the bike tint preset or
+	// edits a Custom slot's RGB channel — in steady state the same Paint
+	// is reused frame after frame at zero alloc. Replaces the per-preset
+	// fields (Dark/Medium/Light/White) so colored tints (Red/Blue/Green/
+	// Gold) and the three Custom slots share the same cache slot.
+	private Paint bikeTintPaintCached;
+	private int bikeTintPaintCachedRgb = -1;
+
+	// Lazily-built sky Paint cache. Rebuilt only when the inputs change
+	// (gradient mode, primary/secondary colors, or viewport size) — in
+	// steady state _tryvV reuses the same Paint frame after frame, so
+	// SOLID / SECONDARY are zero-alloc and the four gradient modes pay
+	// one Shader allocation per change. Strategy dispatch makes it
+	// trivial to slot in a future image-background mode as an additional
+	// case without disturbing the render path.
+	private Paint skyPaint;
+	private int skyCachedMode      = -1;
+	private int skyCachedPrimary;
+	private int skyCachedSecondary;
+	private int skyCachedWidth;
+	private int skyCachedHeight;
+
+	private Paint lazyBikeTintPaint(int rgb) {
+		if (bikeTintPaintCached != null && bikeTintPaintCachedRgb == rgb)
+			return bikeTintPaintCached;
+		bikeTintPaintCached = buildBikeTintPaint(rgb);
+		bikeTintPaintCachedRgb = rgb;
+		return bikeTintPaintCached;
+	}
+
+	private static Paint buildBikeTintPaint(int rgb) {
+		Paint p = new Paint();
+		p.setFilterBitmap(true);
+		// Brighten matrix generalized to a colored target. Lifts dark
+		// source pixels toward (tR, tG, tB) per channel while leaving
+		// fully-bright pixels at 255 (no inversion). Per-channel slope is
+		// (255 − tX)/255 so the line through (0, tX) and (255, 255) is
+		// exact: black source pixels land at the tint color, AA edges
+		// stay near-white. For grayscale presets the three slopes
+		// collapse to one and this is identical to the previous single-
+		// offset matrix; for colored presets (Red / Blue / Green / Gold /
+		// Custom) the slopes differ per channel so the bike picks up a
+		// hue. With target = (255,255,255) all slopes collapse to 0 and
+		// the wheel paints as a solid white silhouette (WHITE option).
+		int tR = (rgb >> 16) & 0xff;
+		int tG = (rgb >>  8) & 0xff;
+		int tB =  rgb        & 0xff;
+		float slopeR = (255f - tR) / 255f;
+		float slopeG = (255f - tG) / 255f;
+		float slopeB = (255f - tB) / 255f;
+		ColorMatrix m = new ColorMatrix(new float[]{
+				slopeR, 0,      0,      0, tR,
+				0,      slopeG, 0,      0, tG,
+				0,      0,      slopeB, 0, tB,
+				0,      0,      0,      1,  0,
+		});
+		p.setColorFilter(new ColorMatrixColorFilter(m));
+		return p;
 	}
 
 	/**
@@ -991,7 +1049,12 @@ public class GameView extends View {
 	public void drawStartFlag(int j, int k) {
 		if (m_VI > 0x38000)
 			m_VI = 0;
-		setColor(0, 0, 0);
+		// Flag poles are structural map elements, not bike parts — paint
+		// them in the user-chosen pole color directly (AUTO resolves to
+		// theme FG) and bypass setColor() so the near-black branch
+		// (which now applies Bike tint) doesn't recolor the poles when
+		// the user picks Red/Blue/Gold/etc on the bike.
+		paint.setColor(Settings.getStartFlagArgb());
 		_aIIIV(j, k, j, k + 32);
 		drawBitmap(Bitmap.get(Bitmap.FLAGS, startFlagIndexes[m_VI >> 16]), offsetX(j), offsetY(k) - 32);
 	}
@@ -999,7 +1062,9 @@ public class GameView extends View {
 	public void drawFinishFlag(int j, int k) {
 		if (m_VI > 0x38000)
 			m_VI = 0;
-		setColor(0, 0, 0);
+		// See drawStartFlag — same bike-tint bypass rationale, independent
+		// color setting so start and finish poles can be tinted separately.
+		paint.setColor(Settings.getFinishFlagArgb());
 		_aIIIV(j, k, j, k + 32);
 		drawBitmap(Bitmap.get(Bitmap.FLAGS, finishFlagIndexes[m_VI >> 16]), offsetX(j), offsetY(k) - 32);
 	}
@@ -1059,74 +1124,139 @@ public class GameView extends View {
 	}
 
 	public void _tryvV() {
-		// In-game sky / clear color. Reads from Settings each frame so the
-		// dark-mode toggle takes effect on the next render without needing
-		// to rebuild anything.
-		paint.setColor(Settings.getMenuBgColor());
-		canvas.drawRect(0, 0, m_abI, m_dI, paint);
+		// In-game sky paint. Strategy-dispatches on the chosen gradient
+		// mode and the primary/secondary sky colors; the resulting Paint
+		// (with or without a Shader) is cached, so steady-state frames
+		// reuse it directly. Menu chrome stays solid (Settings.getMenuBgColor)
+		// — gradient is only painted behind gameplay.
+		Paint p = ensureSkyPaint(
+				Settings.getSkyGradientMode(),
+				Settings.getSkyPrimaryArgb(),
+				Settings.getSkySecondaryArgb(),
+				m_abI, m_dI);
+		canvas.drawRect(0, 0, m_abI, m_dI, p);
+	}
+
+	private Paint ensureSkyPaint(int mode, int pri, int sec, int w, int h) {
+		if (skyPaint != null
+				&& skyCachedMode == mode
+				&& skyCachedPrimary == pri
+				&& skyCachedSecondary == sec
+				&& skyCachedWidth == w
+				&& skyCachedHeight == h) {
+			return skyPaint;
+		}
+		Paint p = new Paint();
+		Shader shader = null;
+		switch (mode) {
+			case Settings.SKY_GRADIENT_SECONDARY:
+				p.setColor(sec);
+				break;
+			case Settings.SKY_GRADIENT_LINEAR:
+				shader = new LinearGradient(0, 0, 0, h, pri, sec, Shader.TileMode.CLAMP);
+				break;
+			case Settings.SKY_GRADIENT_REVERSE_LINEAR:
+				shader = new LinearGradient(0, 0, 0, h, sec, pri, Shader.TileMode.CLAMP);
+				break;
+			case Settings.SKY_GRADIENT_CENTRAL: {
+				float radius = (float) Math.hypot(w, h) * 0.5f;
+				if (radius <= 0) radius = 1;
+				shader = new RadialGradient(w * 0.5f, h * 0.5f, radius, pri, sec, Shader.TileMode.CLAMP);
+				break;
+			}
+			case Settings.SKY_GRADIENT_REVERSE_CENTRAL: {
+				float radius = (float) Math.hypot(w, h) * 0.5f;
+				if (radius <= 0) radius = 1;
+				shader = new RadialGradient(w * 0.5f, h * 0.5f, radius, sec, pri, Shader.TileMode.CLAMP);
+				break;
+			}
+			case Settings.SKY_GRADIENT_SOLID:
+			default:
+				p.setColor(pri);
+				break;
+		}
+		if (shader != null) p.setShader(shader);
+		skyPaint = p;
+		skyCachedMode = mode;
+		skyCachedPrimary = pri;
+		skyCachedSecondary = sec;
+		skyCachedWidth = w;
+		skyCachedHeight = h;
+		return p;
 	}
 
 	public void setColor(int r, int g, int b) {
 		GDActivity _tmp = activity;
 		boolean dark = Settings.isDarkModeEnabled();
-		// Dark mode: two-branch remap so structural lines stay visible on the
-		// black sky without losing the hue of intentional accent colors.
+		// Three-branch remap so structural lines and accent colors stay
+		// readable across light/dark modes without losing intentional hues.
 		//
-		// (a) Near-black inputs (max channel < 96) — flag poles, line wheels,
-		//     bike frame (50,50,50), driver arms, steering. Complement and
-		//     cap at 0xAA so they read as a muted mid-gray (was 0xCC; user
-		//     asked for the wheels and bike to be a touch darker).
+		// (a) Near-black inputs (max channel < 96) — line wheels, bike frame
+		//     (50,50,50), driver arms, steering. Re-tinted via
+		//     the SAME brighten formula the bike-wheel sprite uses (see
+		//     buildBikeTintPaint), driven by the user's Bike tint setting.
+		//     Keeps line-art-bike (sprite-off mode) visually consistent with
+		//     the sprite-wheel render — picking "Medium" makes both the
+		//     sprite wheels and the line bike land at offset 128, picking
+		//     "Red" tints both with the same red target.
+		//       target = Settings.getBikeTintRgb() — packed 0xRRGGBB or -1
+		//       outputX = (255 − tX)/255 · S + tX   (per channel X∈{R,G,B})
+		//     AUTO resolves to 0xAAAAAA in dark mode and to −1 in light
+		//     mode (passes through, so the line bike stays black-on-white
+		//     as upstream).
 		// (b) Mid-bright inputs (96 ≤ max < 200) — driver body (0,0,128) and
-		//     helmet line (156,0,0). Brighten each channel additively so the
-		//     hue stays intact (blue body remains blue) but the line becomes
-		//     readable on black; the original light-mode values were tuned
-		//     against a white background and would otherwise sink.
+		//     helmet line (156,0,0). DARK MODE ONLY: brighten each channel
+		//     additively so the hue stays intact (blue body remains blue)
+		//     but the line becomes readable on black; the original light-
+		//     mode values were tuned against a white background. Not
+		//     touched by Bike tint — these are accent colors with their
+		//     own hue, like the colored bike-part sprites that pass through
+		//     getSpriteBikePartPaint instead of getSpriteTintPaint.
 		// (c) Already-saturated inputs (max ≥ 200) — brake indicators
 		//     (255,0,0) / (100,100,255). Pass through unchanged — they're
 		//     plenty visible on either background and changing the hue would
 		//     muddle the in-game signal.
-		if (dark) {
-			int max = r;
-			if (g > max) max = g;
-			if (b > max) max = b;
-			if (max < 96) {
-				r = 255 - r;
-				g = 255 - g;
-				b = 255 - b;
-				if (r > 0xAA) r = 0xAA;
-				if (g > 0xAA) g = 0xAA;
-				if (b > 0xAA) b = 0xAA;
-			} else if (max < 200) {
-				r += 96;
-				g += 96;
-				b += 96;
-				if (r > 255) r = 255;
-				if (g > 255) g = 255;
-				if (b > 255) b = 255;
+		int max = r;
+		if (g > max) max = g;
+		if (b > max) max = b;
+		if (max < 96) {
+			int tintRgb = Settings.getBikeTintRgb();
+			if (tintRgb >= 0) {
+				int tR = (tintRgb >> 16) & 0xff;
+				int tG = (tintRgb >>  8) & 0xff;
+				int tB =  tintRgb        & 0xff;
+				float slopeR = (255f - tR) / 255f;
+				float slopeG = (255f - tG) / 255f;
+				float slopeB = (255f - tB) / 255f;
+				r = (int) (slopeR * r + tR);
+				g = (int) (slopeG * g + tG);
+				b = (int) (slopeB * b + tB);
+				if (r < 0) r = 0; else if (r > 255) r = 255;
+				if (g < 0) g = 0; else if (g > 255) g = 255;
+				if (b < 0) b = 0; else if (b > 255) b = 255;
 			}
+		} else if (dark && max < 200) {
+			r += 96;
+			g += 96;
+			b += 96;
+			if (r > 255) r = 255;
+			if (g > 255) g = 255;
+			if (b > 255) b = 255;
 		}
 		if (getGDActivity().isMenuShown()) {
-			if (dark) {
-				// Mirror the light-mode "lift toward background" dim:
-				// background is black, so push the color *down* by 128
-				// (clamped) so overlay graphics sink behind the menu chrome.
-				r -= 128;
-				g -= 128;
-				b -= 128;
-				if (r < 16) r = 16;
-				if (g < 16) g = 16;
-				if (b < 16) b = 16;
-			} else {
-				r += 128;
-				g += 128;
-				b += 128;
-				if (r > 240)
-					r = 240;
-				if (g > 240)
-					g = 240;
-				if (b > 240)
-					b = 240;
-			}
+			// Dim toward the menu chrome (= the chosen sky color) so the
+			// in-game demo sinks behind the menu without distracting from
+			// it. 50% blend rather than the prior flat ±128 offset toward
+			// pure black/white: (a) composes on top of the bike tint so
+			// explicit Bike tint choices (DARK..WHITE) remain visually
+			// distinct through the demo backdrop instead of being clamped
+			// to a single floor/ceiling, and (b) follows the actual sky
+			// color now that the Sky selector can land on teal/blue/etc
+			// rather than only pure black or white.
+			int bg = Settings.getMenuBgColor();
+			r = (r + ((bg >> 16) & 0xff)) >> 1;
+			g = (g + ((bg >>  8) & 0xff)) >> 1;
+			b = (b + ( bg        & 0xff)) >> 1;
 		}
 		//m_CGraphics.setColor(j, k, l);
 		paint.setColor(0xFF000000 | (r << 16) | (g << 8) | b);
@@ -1164,6 +1294,9 @@ public class GameView extends View {
 			// screens don't flash white before the menu loads. Logos are
 			// drawn with the sprite tint paint when dark mode is on so the
 			// (mostly-black) artwork stays visible against the black bg.
+			// (The codebrew PNG was re-encoded so its surround is true
+			// transparent — the themed bg shows through cleanly without a
+			// visible white/black box around the artwork.)
 			if (m_oI == 1) {
 				// Draw codebrew
 				paint.setColor(Settings.getMenuBgColor());

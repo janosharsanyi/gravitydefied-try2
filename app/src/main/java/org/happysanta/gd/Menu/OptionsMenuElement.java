@@ -26,11 +26,23 @@ public class OptionsMenuElement
 	protected MenuScreen optionsScreen = null;
 	protected MenuScreen screen = null;
 	protected boolean isOnOffToggle;
+	// When true, KEY_FIRE pushes the auto-built {@link #optionsScreen}
+	// list-picker subscreen instead of cycling the selection in-place.
+	// LEFT/RIGHT keep their nudge-in-place behavior either way. Intended
+	// for long-cycle pickers (Sky 19, Track 13, Neon 11) where cycling
+	// past every option is tedious. Short cycles (2–6 options) stay in
+	// in-place mode where the cycle is faster than a screen push/pop.
+	protected boolean useListPicker = false;
 	protected boolean m_oZ = false;
 	protected String selectedOption;
 	protected ActionMenuElement optionsScreenItems[] = null;
 	protected MenuImageView lockImage = null;
 	protected MenuTextView optionTextView = null;
+
+	public OptionsMenuElement(String text, int selectedIndex, MenuHandler handler, String options[], boolean isOnOffToggle, MenuScreen screen, boolean useListPicker) {
+		this(text, selectedIndex, handler, options, isOnOffToggle, screen);
+		this.useListPicker = useListPicker;
+	}
 
 	public OptionsMenuElement(String text, int selectedIndex, MenuHandler handler, String options[], boolean isOnOffToggle, MenuScreen screen) {
 		this.text = text;
@@ -237,6 +249,16 @@ public class OptionsMenuElement
 						selectedOption = getString(R.string.on);
 					updateViewText();
 					handler.handleAction(this);
+					return;
+				} else if (useListPicker && optionsScreen != null) {
+					// Push the list-picker subscreen with the current value
+					// pre-highlighted so the user lands on it. handleAction(item)
+					// already pops back and dispatches to the parent handler when
+					// a row is picked. _charvZ() stays false, so the parent's
+					// click handler won't advance the cycle — it just reads the
+					// freshly-set selectedIndex and runs its side effects.
+					optionsScreen.setSelected(selectedIndex);
+					handler.setCurrentMenu(optionsScreen, false);
 					return;
 				} else {
 					m_oZ = true;

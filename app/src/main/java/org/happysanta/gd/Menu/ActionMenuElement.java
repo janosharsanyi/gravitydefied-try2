@@ -46,16 +46,28 @@ public class ActionMenuElement
 	public static final int CHANGE_LEVELS_FOLDER = 17;
 	public static final int RESCAN_FOLDER = 18;
 	public static final int REMOVE_FROM_LIST = 19;
-	// Copy-into-Custom action values for the Colors submenu. Six values —
-	// three slots × two families (track / neon). Used as the actionValue
-	// on the ActionMenuElements inside the inline copy chooser screens
-	// built in Menu so {@link Menu#handleAction} can dispatch them.
+	// Copy-into-Custom action values for the Colors submenu. Nine values —
+	// three slots × three families (track / neon / sky). Used as the
+	// actionValue on the ActionMenuElements inside the inline copy chooser
+	// screens built in Menu so {@link Menu#handleAction} can dispatch them.
 	public static final int COPY_TRACK_INTO_CUSTOM_1 = 20;
 	public static final int COPY_TRACK_INTO_CUSTOM_2 = 21;
 	public static final int COPY_TRACK_INTO_CUSTOM_3 = 22;
 	public static final int COPY_NEON_INTO_CUSTOM_1 = 23;
 	public static final int COPY_NEON_INTO_CUSTOM_2 = 24;
 	public static final int COPY_NEON_INTO_CUSTOM_3 = 25;
+	public static final int COPY_SKY_INTO_CUSTOM_1 = 26;
+	public static final int COPY_SKY_INTO_CUSTOM_2 = 27;
+	public static final int COPY_SKY_INTO_CUSTOM_3 = 28;
+	public static final int COPY_BIKE_TINT_INTO_CUSTOM_1 = 29;
+	public static final int COPY_BIKE_TINT_INTO_CUSTOM_2 = 30;
+	public static final int COPY_BIKE_TINT_INTO_CUSTOM_3 = 31;
+	public static final int COPY_START_FLAG_INTO_CUSTOM_1 = 32;
+	public static final int COPY_START_FLAG_INTO_CUSTOM_2 = 33;
+	public static final int COPY_START_FLAG_INTO_CUSTOM_3 = 34;
+	public static final int COPY_FINISH_FLAG_INTO_CUSTOM_1 = 35;
+	public static final int COPY_FINISH_FLAG_INTO_CUSTOM_2 = 36;
+	public static final int COPY_FINISH_FLAG_INTO_CUSTOM_3 = 37;
 
 	protected MenuHandler handler;
 	protected boolean isLocked = false;

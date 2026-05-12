@@ -50,6 +50,7 @@
 	<string name="map_fill_mode">Map fill</string>
 	<string name="map_across_ticks">Across ticks</string>
 	<string name="gradient_steps">Gradient steps</string>
+	<string name="bike_tint">Bike tint</string>
 	<string name="neon_color">Neon color</string>
 	<!-- Track FG/BG channel row labels. Shown as e.g. "FG R: 255" on the
 	     Colors submenu. -->
@@ -64,14 +65,52 @@
 	<string name="track_fill_r">Fill R</string>
 	<string name="track_fill_g">Fill G</string>
 	<string name="track_fill_b">Fill B</string>
-	<!-- Neon channel row labels (single R/G/B — neon has no FG/BG pair). -->
-	<string name="neon_r">R</string>
-	<string name="neon_g">G</string>
-	<string name="neon_b">B</string>
+	<!-- Neon channel row labels (single R/G/B — neon has no FG/BG pair).
+	     Prefixed with "Neon" to disambiguate from the bike tint channel
+	     rows that also live on the Bike sub-screen. -->
+	<string name="neon_r">Neon R</string>
+	<string name="neon_g">Neon G</string>
+	<string name="neon_b">Neon B</string>
+	<!-- Bike tint channel row labels (R/G/B for the active Custom slot's
+	     tint target). Shown beneath the Bike tint picker on the Bike
+	     sub-screen. -->
+	<string name="bike_tint_r">Tint R</string>
+	<string name="bike_tint_g">Tint G</string>
+	<string name="bike_tint_b">Tint B</string>
+	<!-- Flag pole channel row labels. Two parallel groups (start / finish)
+	     so the user can tint the start and finish poles independently. -->
+	<string name="start_flag_color">Start flag pole</string>
+	<string name="finish_flag_color">Finish flag pole</string>
+	<string name="start_flag_r">Start R</string>
+	<string name="start_flag_g">Start G</string>
+	<string name="start_flag_b">Start B</string>
+	<string name="finish_flag_r">Finish R</string>
+	<string name="finish_flag_g">Finish G</string>
+	<string name="finish_flag_b">Finish B</string>
+	<!-- Sky primary/secondary channel row labels. Primary is the dominant
+	     sky color; secondary participates only when a non-solid gradient
+	     mode is selected. -->
+	<string name="sky_primary_r">Primary R</string>
+	<string name="sky_primary_g">Primary G</string>
+	<string name="sky_primary_b">Primary B</string>
+	<string name="sky_secondary_r">Secondary R</string>
+	<string name="sky_secondary_g">Secondary G</string>
+	<string name="sky_secondary_b">Secondary B</string>
+	<string name="sky_gradient_mode">Sky gradient</string>
 	<!-- Copy-into-Custom action labels and chooser screen titles. -->
 	<string name="copy_track_preset">Copy track preset into Custom\u2026</string>
 	<string name="copy_neon_preset">Copy neon preset into Custom\u2026</string>
+	<string name="copy_sky_preset">Copy sky preset into Custom\u2026</string>
+	<string name="copy_bike_tint_preset">Copy bike tint into Custom\u2026</string>
+	<string name="copy_start_flag_preset">Copy start flag color into Custom\u2026</string>
+	<string name="copy_finish_flag_preset">Copy finish flag color into Custom\u2026</string>
 	<string name="copy_into_custom_title">Copy into Custom</string>
+	<!-- Colors submenu sub-screen titles. Top-level "Colors" is a nav
+	     screen with four links into per-subsystem editors. -->
+	<string name="colors_track">Track</string>
+	<string name="colors_bike">Bike</string>
+	<string name="colors_sky">Sky</string>
+	<string name="colors_flags">Flags</string>
 	<string name="driver_sprite">Driver sprite</string>
 	<string name="bike_sprite">Bike sprite</string>
 	<string name="input">Input</string>
@@ -88,7 +127,7 @@
 	<string name="button_ab_swap">Swap A/B buttons</string>
 	<string name="immersive_mode">Immersive mode</string>
 	<string name="immersive_nav">Hide nav bar</string>
-	<string name="dark_mode">Dark mode</string>
+	<string name="sky_color">Sky</string>
 	<string name="fps_overlay">Show FPS</string>
 	<string name="clear_highscore">Clear highscore</string>
 	<string name="full_reset">Full Reset</string>
@@ -236,6 +275,8 @@
 		<item>Blue</item>
 		<item>Cyan</item>
 		<item>Green</item>
+		<item>Orange</item>
+		<item>White</item>
 		<item>Custom 1</item>
 		<item>Custom 2</item>
 		<item>Custom 3</item>
@@ -257,6 +298,8 @@
 		<item>Blue</item>
 		<item>Gray</item>
 		<item>Black/White</item>
+		<item>Orange</item>
+		<item>Magenta</item>
 		<item>Custom 1</item>
 		<item>Custom 2</item>
 		<item>Custom 3</item>
@@ -306,6 +349,109 @@
 		<item>6</item>
 		<item>8</item>
 		<item>12</item>
+	</string-array>
+
+	<!-- Bike tint: tint target for the mostly-black bike wheel sprite AND
+	     the line-art bike (sprite-off mode) — both render paths share the
+	     same brighten-toward-target formula so picking e.g. Red tints both
+	     consistently. Auto preserves upstream behavior (natural in light
+	     mode, light gray in dark mode). Natural is always natural.
+	     Dark/Medium/Light/White are grayscale offsets (85/128/170/255).
+	     Red/Blue/Green/Gold lift blacks toward a saturated mid-bright hue.
+	     Custom 1/2/3 are user-editable RGB slots. Order matches
+	     Settings.BIKE_TINT_* constants. -->
+	<string-array name="bike_tint_options">
+		<item>Auto</item>
+		<item>Natural</item>
+		<item>Dark</item>
+		<item>Medium</item>
+		<item>Light</item>
+		<item>White</item>
+		<item>Red</item>
+		<item>Orange</item>
+		<item>Gold</item>
+		<item>Green</item>
+		<item>Teal</item>
+		<item>Cyan</item>
+		<item>Blue</item>
+		<item>Purple</item>
+		<item>Magenta</item>
+		<item>Pink</item>
+		<item>Custom 1</item>
+		<item>Custom 2</item>
+		<item>Custom 3</item>
+	</string-array>
+
+	<!-- Flag pole color options. Shared between start and finish pickers;
+	     each pole has its own selected index + its own Custom slots. Auto
+	     follows the theme foreground (matches upstream "structural line"
+	     behavior). Order matches Settings.FLAG_POLE_COLOR_* constants. -->
+	<string-array name="flag_pole_color_options">
+		<item>Auto</item>
+		<item>Black</item>
+		<item>Gray</item>
+		<item>White</item>
+		<item>Red</item>
+		<item>Orange</item>
+		<item>Yellow</item>
+		<item>Lime</item>
+		<item>Green</item>
+		<item>Teal</item>
+		<item>Cyan</item>
+		<item>Blue</item>
+		<item>Purple</item>
+		<item>Magenta</item>
+		<item>Pink</item>
+		<item>Brown</item>
+		<item>Custom 1</item>
+		<item>Custom 2</item>
+		<item>Custom 3</item>
+	</string-array>
+
+	<!-- Sky color options (in-game background + menu chrome). Order matches
+	     Settings.SKY_* constants. 16 built-in presets are grouped darker→
+	     lighter (8 dark: Black..Burgundy; 8 light: Light teal..White) and
+	     curated as dark↔light pairs (Black↔White, Dark gray↔Light gray,
+	     teals, Blue↔Sky blue, Indigo↔Lavender, Forest↔Mint, Burgundy↔
+	     Salmon). Three user-editable Custom slots are appended at the end
+	     — each stores a primary + secondary color so any gradient mode can
+	     render two distinct tones. Built-ins have primary = secondary, so
+	     gradient modes render solid on them. -->
+	<string-array name="sky_color_options">
+		<item>Black</item>
+		<item>Dark gray</item>
+		<item>Dark teal</item>
+		<item>Mid teal</item>
+		<item>Blue</item>
+		<item>Indigo</item>
+		<item>Forest</item>
+		<item>Burgundy</item>
+		<item>Light teal</item>
+		<item>Cyan</item>
+		<item>Sky blue</item>
+		<item>Lavender</item>
+		<item>Salmon</item>
+		<item>Mint</item>
+		<item>Light gray</item>
+		<item>White</item>
+		<item>Custom 1</item>
+		<item>Custom 2</item>
+		<item>Custom 3</item>
+	</string-array>
+
+	<!-- Sky gradient mode options. Order matches Settings.SKY_GRADIENT_*
+	     constants. Solid = primary only (default, matches the prior
+	     single-color sky). Secondary = secondary only. Linear / Reverse
+	     linear = vertical primary↔secondary blend. Central / Reverse
+	     central = radial blend (center↔edges). Built-ins have
+	     primary = secondary so every mode renders solid for them. -->
+	<string-array name="sky_gradient_mode_options">
+		<item>Solid</item>
+		<item>Secondary</item>
+		<item>Linear</item>
+		<item>Reverse linear</item>
+		<item>Central</item>
+		<item>Reverse central</item>
 	</string-array>
 
 	<string-array name="keyset">

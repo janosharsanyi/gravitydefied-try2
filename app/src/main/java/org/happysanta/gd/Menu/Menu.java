@@ -80,13 +80,33 @@ public class Menu
 	private OptionsMenuElement mapFillModeOptionItem;
 	private OptionsMenuElement mapAcrossTicksOptionItem;
 	private OptionsMenuElement gradientStepsOptionItem;
+	private OptionsMenuElement bikeTintOptionItem;
 	private OptionsMenuElement neonColorOptionItem;
-	private ColorsMenuScreen colorsScreen;
+	private OptionsMenuElement startFlagColorOptionItem;
+	private OptionsMenuElement finishFlagColorOptionItem;
+	// Top-level Colors screen is now a thin nav screen with four links
+	// (Track / Bike / Sky / Flags) into per-subsystem ColorsMenuScreen
+	// instances that host the actual pickers / channel rows / copy entries.
+	// Splits the previously-~22-item single submenu into focused sub-screens.
+	private MenuScreen colorsScreen;
+	private ColorsMenuScreen trackColorsScreen;
+	private ColorsMenuScreen bikeColorsScreen;
+	private ColorsMenuScreen skyColorsScreen;
+	private ColorsMenuScreen flagsColorsScreen;
 	private MenuScreen trackCopyChooserScreen;
 	private MenuScreen neonCopyChooserScreen;
+	private MenuScreen skyCopyChooserScreen;
+	private MenuScreen bikeTintCopyChooserScreen;
+	private MenuScreen startFlagCopyChooserScreen;
+	private MenuScreen finishFlagCopyChooserScreen;
 	private SimpleMenuElementNew colorsMenuItem;
 	private SimpleMenuElementNew copyTrackPresetItem;
 	private SimpleMenuElementNew copyNeonPresetItem;
+	private SimpleMenuElementNew copySkyPresetItem;
+	private SimpleMenuElementNew copyBikeTintPresetItem;
+	private SimpleMenuElementNew copyStartFlagPresetItem;
+	private SimpleMenuElementNew copyFinishFlagPresetItem;
+	private OptionsMenuElement skyGradientOptionItem;
 	private OptionsMenuElement driverSpriteOptionItem;
 	private OptionsMenuElement bikeSpriteOptionItem;
 	private OptionsMenuElement inputOptionItem;
@@ -102,7 +122,7 @@ public class Menu
 	private OptionsMenuElement buttonAbSwapOptionItem;
 	private OptionsMenuElement immersiveModeOptionItem;
 	private OptionsMenuElement immersiveNavOptionItem;
-	private OptionsMenuElement darkModeOptionItem;
+	private OptionsMenuElement skyColorOptionItem;
 	private OptionsMenuElement fpsOverlayOptionItem;
 	private OptionsMenuElement vibrateOnTouchOptionItem;
 	private SimpleMenuElementNew clearHighscoreOptionItem;
@@ -172,7 +192,11 @@ public class Menu
 	private String[] mapColorGradientStrings = null;
 	private String[] mapFillModeStrings = null;
 	private String[] gradientStepsStrings = null;
+	private String[] bikeTintStrings = null;
+	private String[] skyColorStrings = null;
+	private String[] skyGradientModeStrings = null;
 	private String[] neonColorStrings = null;
+	private String[] flagPoleColorStrings = null;
 	private String[] customSlotStrings = null;
 	// private EmptyLineMenuElement emptyLine;
 	// private EmptyLineMenuElement emptyLineBeforeAction;
@@ -223,7 +247,11 @@ public class Menu
 				mapColorGradientStrings = getStringArray(R.array.map_color_gradient_options);
 			mapFillModeStrings = getStringArray(R.array.map_fill_mode_options);
 				gradientStepsStrings = getStringArray(R.array.gradient_steps_options);
+				bikeTintStrings = getStringArray(R.array.bike_tint_options);
+				skyColorStrings = getStringArray(R.array.sky_color_options);
+				skyGradientModeStrings = getStringArray(R.array.sky_gradient_mode_options);
 				neonColorStrings = getStringArray(R.array.neon_color_options);
+				flagPoleColorStrings = getStringArray(R.array.flag_pole_color_options);
 				customSlotStrings = getStringArray(R.array.custom_slot_options);
 				difficultyLevels = getStringArray(R.array.difficulty);
 
@@ -379,14 +407,24 @@ public class Menu
 				playMenu = new MenuScreen(getString(R.string.play), mainMenu);
 				managerScreen = new MenuScreen(getString(R.string.mods), mainMenu);
 				optionsMenu = new MenuScreen(getString(R.string.options), mainMenu);
-				// Pre-create the Colors submenu and its two copy-into-Custom
-				// choosers so the track / gradient / neon option items below
-				// can take colorsScreen as their parent screen. Their
-				// children (channel rows, copy entries) are wired up later by
-				// buildColorsSubmenu().
-				colorsScreen = new ColorsMenuScreen(getString(R.string.colors), optionsMenu);
-				trackCopyChooserScreen = new MenuScreen(getString(R.string.copy_into_custom_title), colorsScreen);
-				neonCopyChooserScreen = new MenuScreen(getString(R.string.copy_into_custom_title), colorsScreen);
+				// Pre-create the Colors nav screen and its three per-subsystem
+				// editor sub-screens so the track / gradient / neon / sky
+				// option items below can take the matching sub-screen as
+				// their parent. Each copy-into-Custom chooser sits under
+				// its own editor sub-screen so Back returns to the right
+				// place. Children (channel rows, copy entries) are wired
+				// up later by buildColorsSubmenu().
+				colorsScreen = new MenuScreen(getString(R.string.colors), optionsMenu);
+				trackColorsScreen = new ColorsMenuScreen(getString(R.string.colors_track), colorsScreen);
+				bikeColorsScreen = new ColorsMenuScreen(getString(R.string.colors_bike), colorsScreen);
+				skyColorsScreen = new ColorsMenuScreen(getString(R.string.colors_sky), colorsScreen);
+				flagsColorsScreen = new ColorsMenuScreen(getString(R.string.colors_flags), colorsScreen);
+				trackCopyChooserScreen = new MenuScreen(getString(R.string.copy_into_custom_title), trackColorsScreen);
+				neonCopyChooserScreen = new MenuScreen(getString(R.string.copy_into_custom_title), bikeColorsScreen);
+				skyCopyChooserScreen = new MenuScreen(getString(R.string.copy_into_custom_title), skyColorsScreen);
+				bikeTintCopyChooserScreen = new MenuScreen(getString(R.string.copy_into_custom_title), bikeColorsScreen);
+				startFlagCopyChooserScreen = new MenuScreen(getString(R.string.copy_into_custom_title), flagsColorsScreen);
+				finishFlagCopyChooserScreen = new MenuScreen(getString(R.string.copy_into_custom_title), flagsColorsScreen);
 				aboutScreen = new MenuScreen(getString(R.string.about) + " v" + getAppVersion(), mainMenu);
 				helpMenu = new MenuScreen(getString(R.string.help), mainMenu);
 
@@ -441,14 +479,18 @@ public class Menu
 				// 	softwareJoystickOptionItem = new ActionMenuElement("Software Joystick", m_aTB, this, onOffStrings, true, activity, optionsMenu, false);
 				perspectiveOptionItem = new OptionsMenuElement(getString(R.string.perspective), Settings.isPerspectiveEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				shadowModeOptionItem = new OptionsMenuElement(getString(R.string.shadows), Settings.getShadowMode(), this, shadowModeStrings, false, optionsMenu);
-				trackColorOptionItem = new OptionsMenuElement(getString(R.string.track_color), Settings.getTrackColorMode(), this, trackColorStrings, false, colorsScreen);
-				mapColorGradientOptionItem = new OptionsMenuElement(getString(R.string.map_color_gradient), Settings.getMapColorGradient(), this, mapColorGradientStrings, false, colorsScreen);
-				mapFillModeOptionItem = new OptionsMenuElement(getString(R.string.map_fill_mode), Settings.getMapFillMode(), this, mapFillModeStrings, false, colorsScreen);
+				trackColorOptionItem = new OptionsMenuElement(getString(R.string.track_color), Settings.getTrackColorMode(), this, trackColorStrings, false, trackColorsScreen, true);
+				mapColorGradientOptionItem = new OptionsMenuElement(getString(R.string.map_color_gradient), Settings.getMapColorGradient(), this, mapColorGradientStrings, false, trackColorsScreen);
+				mapFillModeOptionItem = new OptionsMenuElement(getString(R.string.map_fill_mode), Settings.getMapFillMode(), this, mapFillModeStrings, false, trackColorsScreen);
 				// Across ticks: 0=On, 1=Off — matches the perspectiveOptionItem
 				// convention (a boolean rendered through the onOffStrings array).
-				mapAcrossTicksOptionItem = new OptionsMenuElement(getString(R.string.map_across_ticks), Settings.isAcrossTicksEnabled() ? 0 : 1, this, onOffStrings, true, colorsScreen);
-				gradientStepsOptionItem = new OptionsMenuElement(getString(R.string.gradient_steps), gradientStepsIndexFromN(Settings.getGradientSteps()), this, gradientStepsStrings, false, colorsScreen);
-				neonColorOptionItem = new OptionsMenuElement(getString(R.string.neon_color), Settings.getNeonColor(), this, neonColorStrings, false, colorsScreen);
+				mapAcrossTicksOptionItem = new OptionsMenuElement(getString(R.string.map_across_ticks), Settings.isAcrossTicksEnabled() ? 0 : 1, this, onOffStrings, true, trackColorsScreen);
+				gradientStepsOptionItem = new OptionsMenuElement(getString(R.string.gradient_steps), gradientStepsIndexFromN(Settings.getGradientSteps()), this, gradientStepsStrings, false, trackColorsScreen);
+				// 13 options (Auto / Natural / 4 grayscale / 4 color / 3 Custom);
+				// use the list-picker subscreen so cycling past 13 entries isn't
+				// tedious. Matches track/neon/sky picker UX.
+				bikeTintOptionItem = new OptionsMenuElement(getString(R.string.bike_tint), Settings.getBikeTint(), this, bikeTintStrings, false, bikeColorsScreen, true);
+				neonColorOptionItem = new OptionsMenuElement(getString(R.string.neon_color), Settings.getNeonColor(), this, neonColorStrings, false, bikeColorsScreen, true);
 				driverSpriteOptionItem = new OptionsMenuElement(getString(R.string.driver_sprite), Settings.isDriverSpriteEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				bikeSpriteOptionItem = new OptionsMenuElement(getString(R.string.bike_sprite), Settings.isBikeSpriteEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				inputOptionItem = new OptionsMenuElement(getString(R.string.input), Settings.getInputOption(), this, keysetStrings, false, optionsMenu);
@@ -465,12 +507,22 @@ public class Menu
 				buttonAbSwapOptionItem = new OptionsMenuElement(getString(R.string.button_ab_swap), Settings.isButtonAbSwapEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				immersiveModeOptionItem = new OptionsMenuElement(getString(R.string.immersive_mode), Settings.isImmersiveModeEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				immersiveNavOptionItem = new OptionsMenuElement(getString(R.string.immersive_nav), Settings.isImmersiveNavEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
-				darkModeOptionItem = new OptionsMenuElement(getString(R.string.dark_mode), Settings.isDarkModeEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
+				skyColorOptionItem = new OptionsMenuElement(getString(R.string.sky_color), Settings.getSkyColor(), this, skyColorStrings, false, skyColorsScreen, true);
+				skyGradientOptionItem = new OptionsMenuElement(getString(R.string.sky_gradient_mode), Settings.getSkyGradientMode(), this, skyGradientModeStrings, false, skyColorsScreen);
+				// Flag pole pickers — 12 options each (Auto / 8 built-in / 3
+				// Custom). Use the list-picker subscreen for consistency with
+				// other ≥7-option pickers in this screen family.
+				startFlagColorOptionItem = new OptionsMenuElement(getString(R.string.start_flag_color), Settings.getStartFlagColor(), this, flagPoleColorStrings, false, flagsColorsScreen, true);
+				finishFlagColorOptionItem = new OptionsMenuElement(getString(R.string.finish_flag_color), Settings.getFinishFlagColor(), this, flagPoleColorStrings, false, flagsColorsScreen, true);
 				fpsOverlayOptionItem = new OptionsMenuElement(getString(R.string.fps_overlay), Settings.isFpsOverlayEnabled() ? 0 : 1, this, onOffStrings, true, optionsMenu);
 				clearHighscoreOptionItem = new SimpleMenuElementNew(getString(R.string.clear_highscore), eraseScreen, this);
 				colorsMenuItem = new SimpleMenuElementNew(getString(R.string.colors), colorsScreen, this);
 				copyTrackPresetItem = new SimpleMenuElementNew(getString(R.string.copy_track_preset), trackCopyChooserScreen, this);
 				copyNeonPresetItem = new SimpleMenuElementNew(getString(R.string.copy_neon_preset), neonCopyChooserScreen, this);
+				copySkyPresetItem = new SimpleMenuElementNew(getString(R.string.copy_sky_preset), skyCopyChooserScreen, this);
+				copyBikeTintPresetItem = new SimpleMenuElementNew(getString(R.string.copy_bike_tint_preset), bikeTintCopyChooserScreen, this);
+				copyStartFlagPresetItem = new SimpleMenuElementNew(getString(R.string.copy_start_flag_preset), startFlagCopyChooserScreen, this);
+				copyFinishFlagPresetItem = new SimpleMenuElementNew(getString(R.string.copy_finish_flag_preset), finishFlagCopyChooserScreen, this);
 
 				// Colors submenu — single place for every color-related setting.
 				// Track color preset + gradient picker move here; neon color
@@ -500,7 +552,6 @@ public class Menu
 				optionsMenu.addItem(buttonAbSwapOptionItem);
 				optionsMenu.addItem(immersiveModeOptionItem);
 				optionsMenu.addItem(immersiveNavOptionItem);
-				optionsMenu.addItem(darkModeOptionItem);
 				optionsMenu.addItem(fpsOverlayOptionItem);
 				optionsMenu.addItem(clearHighscoreOptionItem);
 				optionsMenu.addItem(createAction(ActionMenuElement.BACK));
@@ -675,12 +726,13 @@ public class Menu
 		return new EmptyLineMenuElement(beforeAction ? 10 : 20);
 	}
 
-	// Construct the Colors submenu and its two inline copy-into-Custom
-	// chooser screens. Track and neon families share the
-	// ChannelMenuElement / ChannelTarget plumbing; the chooser screens
-	// each get three slot ActionMenuElements + Back. The OptionsMenuElement
-	// pickers (track, gradient, neon) are already constructed at this
-	// point — we only add them to colorsScreen here.
+	// Construct the Colors submenu hierarchy: a top-level nav screen with
+	// three links into per-subsystem editor sub-screens (Track / Bike /
+	// Sky) plus three inline copy-into-Custom choosers (one per
+	// subsystem). All three subsystems share the same ChannelMenuElement
+	// / ChannelTarget plumbing. The OptionsMenuElement pickers (track,
+	// gradient, neon, sky, sky gradient) are already constructed at this
+	// point — we only add them to the matching sub-screen here.
 	private void buildColorsSubmenu() {
 		// Track FG channel rows (FG R / G / B).
 		ChannelMenuElement trackFgR = makeTrackChannelRow(getString(R.string.track_fg_r), Settings.TRACK_CUSTOM_KIND_FG, 0);
@@ -703,50 +755,139 @@ public class Menu
 		ChannelMenuElement neonR = makeNeonChannelRow(getString(R.string.neon_r), 0);
 		ChannelMenuElement neonG = makeNeonChannelRow(getString(R.string.neon_g), 1);
 		ChannelMenuElement neonB = makeNeonChannelRow(getString(R.string.neon_b), 2);
+		// Bike tint channel rows (Tint R / G / B). Editable only when the
+		// active bike tint preset is a Custom slot; on built-ins the row
+		// routes through the copy-into-Custom chooser via ChannelTarget.
+		ChannelMenuElement bikeTintR = makeBikeTintChannelRow(getString(R.string.bike_tint_r), 0);
+		ChannelMenuElement bikeTintG = makeBikeTintChannelRow(getString(R.string.bike_tint_g), 1);
+		ChannelMenuElement bikeTintB = makeBikeTintChannelRow(getString(R.string.bike_tint_b), 2);
+		// Sky primary / secondary channel rows.
+		ChannelMenuElement skyPriR = makeSkyChannelRow(getString(R.string.sky_primary_r), Settings.SKY_CUSTOM_KIND_PRIMARY, 0);
+		ChannelMenuElement skyPriG = makeSkyChannelRow(getString(R.string.sky_primary_g), Settings.SKY_CUSTOM_KIND_PRIMARY, 1);
+		ChannelMenuElement skyPriB = makeSkyChannelRow(getString(R.string.sky_primary_b), Settings.SKY_CUSTOM_KIND_PRIMARY, 2);
+		ChannelMenuElement skySecR = makeSkyChannelRow(getString(R.string.sky_secondary_r), Settings.SKY_CUSTOM_KIND_SECONDARY, 0);
+		ChannelMenuElement skySecG = makeSkyChannelRow(getString(R.string.sky_secondary_g), Settings.SKY_CUSTOM_KIND_SECONDARY, 1);
+		ChannelMenuElement skySecB = makeSkyChannelRow(getString(R.string.sky_secondary_b), Settings.SKY_CUSTOM_KIND_SECONDARY, 2);
+		// Flag pole channel rows. Two parallel groups — start and finish —
+		// each editable only when the matching pole's active preset is a
+		// Custom slot; on built-ins the row routes through the matching
+		// copy-into-Custom chooser. The "false" 4th arg picks the start
+		// vs finish channel-row factory (true = finish).
+		ChannelMenuElement startFlagR = makeFlagPoleChannelRow(getString(R.string.start_flag_r), 0, false);
+		ChannelMenuElement startFlagG = makeFlagPoleChannelRow(getString(R.string.start_flag_g), 1, false);
+		ChannelMenuElement startFlagB = makeFlagPoleChannelRow(getString(R.string.start_flag_b), 2, false);
+		ChannelMenuElement finishFlagR = makeFlagPoleChannelRow(getString(R.string.finish_flag_r), 0, true);
+		ChannelMenuElement finishFlagG = makeFlagPoleChannelRow(getString(R.string.finish_flag_g), 1, true);
+		ChannelMenuElement finishFlagB = makeFlagPoleChannelRow(getString(R.string.finish_flag_b), 2, true);
 
-		colorsScreen.registerTrackRow(trackFgR);
-		colorsScreen.registerTrackRow(trackFgG);
-		colorsScreen.registerTrackRow(trackFgB);
-		colorsScreen.registerTrackRow(trackBgR);
-		colorsScreen.registerTrackRow(trackBgG);
-		colorsScreen.registerTrackRow(trackBgB);
-		colorsScreen.registerTrackRow(trackFillR);
-		colorsScreen.registerTrackRow(trackFillG);
-		colorsScreen.registerTrackRow(trackFillB);
-		colorsScreen.registerNeonRow(neonR);
-		colorsScreen.registerNeonRow(neonG);
-		colorsScreen.registerNeonRow(neonB);
+		trackColorsScreen.registerTrackRow(trackFgR);
+		trackColorsScreen.registerTrackRow(trackFgG);
+		trackColorsScreen.registerTrackRow(trackFgB);
+		trackColorsScreen.registerTrackRow(trackBgR);
+		trackColorsScreen.registerTrackRow(trackBgG);
+		trackColorsScreen.registerTrackRow(trackBgB);
+		trackColorsScreen.registerTrackRow(trackFillR);
+		trackColorsScreen.registerTrackRow(trackFillG);
+		trackColorsScreen.registerTrackRow(trackFillB);
+		bikeColorsScreen.registerNeonRow(neonR);
+		bikeColorsScreen.registerNeonRow(neonG);
+		bikeColorsScreen.registerNeonRow(neonB);
+		bikeColorsScreen.registerBikeTintRow(bikeTintR);
+		bikeColorsScreen.registerBikeTintRow(bikeTintG);
+		bikeColorsScreen.registerBikeTintRow(bikeTintB);
+		skyColorsScreen.registerSkyRow(skyPriR);
+		skyColorsScreen.registerSkyRow(skyPriG);
+		skyColorsScreen.registerSkyRow(skyPriB);
+		skyColorsScreen.registerSkyRow(skySecR);
+		skyColorsScreen.registerSkyRow(skySecG);
+		skyColorsScreen.registerSkyRow(skySecB);
+		flagsColorsScreen.registerStartFlagRow(startFlagR);
+		flagsColorsScreen.registerStartFlagRow(startFlagG);
+		flagsColorsScreen.registerStartFlagRow(startFlagB);
+		flagsColorsScreen.registerFinishFlagRow(finishFlagR);
+		flagsColorsScreen.registerFinishFlagRow(finishFlagG);
+		flagsColorsScreen.registerFinishFlagRow(finishFlagB);
 
-		// Layout: track section, neon section, back. Empty lines separate
-		// groups; matches the visual rhythm of the existing Options screen.
-		colorsScreen.addItem(trackColorOptionItem);
-		colorsScreen.addItem(mapColorGradientOptionItem);
-		colorsScreen.addItem(mapFillModeOptionItem);
-		colorsScreen.addItem(mapAcrossTicksOptionItem);
-		colorsScreen.addItem(gradientStepsOptionItem);
-		colorsScreen.addItem(trackFgR);
-		colorsScreen.addItem(trackFgG);
-		colorsScreen.addItem(trackFgB);
-		colorsScreen.addItem(trackBgR);
-		colorsScreen.addItem(trackBgG);
-		colorsScreen.addItem(trackBgB);
-		colorsScreen.addItem(trackFillR);
-		colorsScreen.addItem(trackFillG);
-		colorsScreen.addItem(trackFillB);
-		colorsScreen.addItem(copyTrackPresetItem);
-		colorsScreen.addItem(createEmptyLine(false));
-		colorsScreen.addItem(neonColorOptionItem);
-		colorsScreen.addItem(neonR);
-		colorsScreen.addItem(neonG);
-		colorsScreen.addItem(neonB);
-		colorsScreen.addItem(copyNeonPresetItem);
+		// Top-level Colors screen: four nav links + Back.
+		colorsScreen.addItem(new SimpleMenuElementNew(getString(R.string.colors_track), trackColorsScreen, this));
+		colorsScreen.addItem(new SimpleMenuElementNew(getString(R.string.colors_bike), bikeColorsScreen, this));
+		colorsScreen.addItem(new SimpleMenuElementNew(getString(R.string.colors_sky), skyColorsScreen, this));
+		colorsScreen.addItem(new SimpleMenuElementNew(getString(R.string.colors_flags), flagsColorsScreen, this));
 		colorsScreen.addItem(createEmptyLine(true));
 		colorsScreen.addItem(createAction(ActionMenuElement.BACK));
+
+		// Track sub-screen layout.
+		trackColorsScreen.addItem(trackColorOptionItem);
+		trackColorsScreen.addItem(mapColorGradientOptionItem);
+		trackColorsScreen.addItem(mapFillModeOptionItem);
+		trackColorsScreen.addItem(mapAcrossTicksOptionItem);
+		trackColorsScreen.addItem(gradientStepsOptionItem);
+		trackColorsScreen.addItem(trackFgR);
+		trackColorsScreen.addItem(trackFgG);
+		trackColorsScreen.addItem(trackFgB);
+		trackColorsScreen.addItem(trackBgR);
+		trackColorsScreen.addItem(trackBgG);
+		trackColorsScreen.addItem(trackBgB);
+		trackColorsScreen.addItem(trackFillR);
+		trackColorsScreen.addItem(trackFillG);
+		trackColorsScreen.addItem(trackFillB);
+		trackColorsScreen.addItem(copyTrackPresetItem);
+		trackColorsScreen.addItem(createEmptyLine(true));
+		trackColorsScreen.addItem(createAction(ActionMenuElement.BACK));
+
+		// Bike sub-screen layout. Tint picker + its R/G/B Custom channels
+		// + tint copy come first; then the neon picker + neon channels +
+		// neon copy. Two parallel sections, ordered tint→neon to match
+		// the visual hierarchy (tint repaints the whole bike, neon is an
+		// accent layered on top).
+		bikeColorsScreen.addItem(bikeTintOptionItem);
+		bikeColorsScreen.addItem(bikeTintR);
+		bikeColorsScreen.addItem(bikeTintG);
+		bikeColorsScreen.addItem(bikeTintB);
+		bikeColorsScreen.addItem(copyBikeTintPresetItem);
+		bikeColorsScreen.addItem(neonColorOptionItem);
+		bikeColorsScreen.addItem(neonR);
+		bikeColorsScreen.addItem(neonG);
+		bikeColorsScreen.addItem(neonB);
+		bikeColorsScreen.addItem(copyNeonPresetItem);
+		bikeColorsScreen.addItem(createEmptyLine(true));
+		bikeColorsScreen.addItem(createAction(ActionMenuElement.BACK));
+
+		// Sky sub-screen layout (sky preset + gradient mode + primary /
+		// secondary channels + copy).
+		skyColorsScreen.addItem(skyColorOptionItem);
+		skyColorsScreen.addItem(skyGradientOptionItem);
+		skyColorsScreen.addItem(skyPriR);
+		skyColorsScreen.addItem(skyPriG);
+		skyColorsScreen.addItem(skyPriB);
+		skyColorsScreen.addItem(skySecR);
+		skyColorsScreen.addItem(skySecG);
+		skyColorsScreen.addItem(skySecB);
+		skyColorsScreen.addItem(copySkyPresetItem);
+		skyColorsScreen.addItem(createEmptyLine(true));
+		skyColorsScreen.addItem(createAction(ActionMenuElement.BACK));
+
+		// Flags sub-screen layout. Start picker + start R/G/B + start copy,
+		// then finish picker + finish R/G/B + finish copy. Two independent
+		// sections so the user can tint start and finish poles differently
+		// (handy when they want a green "go" pole and a red "stop" pole).
+		flagsColorsScreen.addItem(startFlagColorOptionItem);
+		flagsColorsScreen.addItem(startFlagR);
+		flagsColorsScreen.addItem(startFlagG);
+		flagsColorsScreen.addItem(startFlagB);
+		flagsColorsScreen.addItem(copyStartFlagPresetItem);
+		flagsColorsScreen.addItem(finishFlagColorOptionItem);
+		flagsColorsScreen.addItem(finishFlagR);
+		flagsColorsScreen.addItem(finishFlagG);
+		flagsColorsScreen.addItem(finishFlagB);
+		flagsColorsScreen.addItem(copyFinishFlagPresetItem);
+		flagsColorsScreen.addItem(createEmptyLine(true));
+		flagsColorsScreen.addItem(createAction(ActionMenuElement.BACK));
 
 		// Track copy-into-Custom chooser — three slot actions + Back. The
 		// handler in handleAction reads the active track preset, copies its
 		// channels into the chosen slot, switches the active preset to
-		// that slot, and pops back to colorsScreen.
+		// that slot, and pops back to the track sub-screen.
 		trackCopyChooserScreen.addItem(new ActionMenuElement(
 				customSlotStrings[0], ActionMenuElement.COPY_TRACK_INTO_CUSTOM_1, this));
 		trackCopyChooserScreen.addItem(new ActionMenuElement(
@@ -764,6 +905,42 @@ public class Menu
 				customSlotStrings[2], ActionMenuElement.COPY_NEON_INTO_CUSTOM_3, this));
 		neonCopyChooserScreen.addItem(createEmptyLine(true));
 		neonCopyChooserScreen.addItem(createAction(ActionMenuElement.BACK));
+
+		skyCopyChooserScreen.addItem(new ActionMenuElement(
+				customSlotStrings[0], ActionMenuElement.COPY_SKY_INTO_CUSTOM_1, this));
+		skyCopyChooserScreen.addItem(new ActionMenuElement(
+				customSlotStrings[1], ActionMenuElement.COPY_SKY_INTO_CUSTOM_2, this));
+		skyCopyChooserScreen.addItem(new ActionMenuElement(
+				customSlotStrings[2], ActionMenuElement.COPY_SKY_INTO_CUSTOM_3, this));
+		skyCopyChooserScreen.addItem(createEmptyLine(true));
+		skyCopyChooserScreen.addItem(createAction(ActionMenuElement.BACK));
+
+		bikeTintCopyChooserScreen.addItem(new ActionMenuElement(
+				customSlotStrings[0], ActionMenuElement.COPY_BIKE_TINT_INTO_CUSTOM_1, this));
+		bikeTintCopyChooserScreen.addItem(new ActionMenuElement(
+				customSlotStrings[1], ActionMenuElement.COPY_BIKE_TINT_INTO_CUSTOM_2, this));
+		bikeTintCopyChooserScreen.addItem(new ActionMenuElement(
+				customSlotStrings[2], ActionMenuElement.COPY_BIKE_TINT_INTO_CUSTOM_3, this));
+		bikeTintCopyChooserScreen.addItem(createEmptyLine(true));
+		bikeTintCopyChooserScreen.addItem(createAction(ActionMenuElement.BACK));
+
+		startFlagCopyChooserScreen.addItem(new ActionMenuElement(
+				customSlotStrings[0], ActionMenuElement.COPY_START_FLAG_INTO_CUSTOM_1, this));
+		startFlagCopyChooserScreen.addItem(new ActionMenuElement(
+				customSlotStrings[1], ActionMenuElement.COPY_START_FLAG_INTO_CUSTOM_2, this));
+		startFlagCopyChooserScreen.addItem(new ActionMenuElement(
+				customSlotStrings[2], ActionMenuElement.COPY_START_FLAG_INTO_CUSTOM_3, this));
+		startFlagCopyChooserScreen.addItem(createEmptyLine(true));
+		startFlagCopyChooserScreen.addItem(createAction(ActionMenuElement.BACK));
+
+		finishFlagCopyChooserScreen.addItem(new ActionMenuElement(
+				customSlotStrings[0], ActionMenuElement.COPY_FINISH_FLAG_INTO_CUSTOM_1, this));
+		finishFlagCopyChooserScreen.addItem(new ActionMenuElement(
+				customSlotStrings[1], ActionMenuElement.COPY_FINISH_FLAG_INTO_CUSTOM_2, this));
+		finishFlagCopyChooserScreen.addItem(new ActionMenuElement(
+				customSlotStrings[2], ActionMenuElement.COPY_FINISH_FLAG_INTO_CUSTOM_3, this));
+		finishFlagCopyChooserScreen.addItem(createEmptyLine(true));
+		finishFlagCopyChooserScreen.addItem(createAction(ActionMenuElement.BACK));
 	}
 
 	// Build a ChannelMenuElement bound to one R/G/B channel of one of
@@ -842,6 +1019,132 @@ public class Menu
 			@Override
 			public void enterCopyFlow() {
 				setCurrentMenu(neonCopyChooserScreen, false);
+			}
+		};
+		return new ChannelMenuElement(label, target);
+	}
+
+	private ChannelMenuElement makeSkyChannelRow(String label, final int kind, final int channel) {
+		final ChannelMenuElement.ChannelTarget target = new ChannelMenuElement.ChannelTarget() {
+			@Override
+			public int getValue() {
+				int preset = Settings.getSkyColor();
+				int slot = Settings.getSkyCustomSlotIndex(preset);
+				if (slot < 0) {
+					int argb = (kind == Settings.SKY_CUSTOM_KIND_SECONDARY)
+							? Settings.getSkySecondaryArgb(preset)
+							: Settings.getSkyPrimaryArgb(preset);
+					return (argb >> (16 - channel * 8)) & 0xff;
+				}
+				return Settings.getSkyCustomChannel(slot, kind, channel);
+			}
+
+			@Override
+			public void setValue(int clamped) {
+				int slot = Settings.getSkyCustomSlotIndex(Settings.getSkyColor());
+				if (slot < 0) return;
+				Settings.setSkyCustomChannel(slot, kind, channel, clamped);
+			}
+
+			@Override
+			public boolean isCurrentPresetCustom() {
+				return Settings.getSkyCustomSlotIndex(Settings.getSkyColor()) >= 0;
+			}
+
+			@Override
+			public void enterCopyFlow() {
+				setCurrentMenu(skyCopyChooserScreen, false);
+			}
+		};
+		return new ChannelMenuElement(label, target);
+	}
+
+	/**
+	 * Build a ChannelMenuElement bound to one R/G/B channel of one of the
+	 * three Custom flag-pole slots. The {@code finish} flag picks the
+	 * start-pole accessors (false) or the finish-pole accessors (true) —
+	 * keeps the menu factory single-file rather than duplicating start
+	 * and finish versions, since they're identical in shape.
+	 */
+	private ChannelMenuElement makeFlagPoleChannelRow(String label, final int channel, final boolean finish) {
+		final ChannelMenuElement.ChannelTarget target = new ChannelMenuElement.ChannelTarget() {
+			@Override
+			public int getValue() {
+				int preset = finish ? Settings.getFinishFlagColor() : Settings.getStartFlagColor();
+				int slot = finish ? Settings.getFinishFlagCustomSlotIndex(preset)
+				                  : Settings.getStartFlagCustomSlotIndex(preset);
+				if (slot < 0) {
+					// Built-in preset: surface the read-only target RGB so the
+					// user can see what they'd copy into a Custom slot. AUTO
+					// resolves through getXxxFlagBaseRgb's GRAY fallback —
+					// neutral seed that's visible in the row regardless of
+					// theme.
+					int rgb = finish ? Settings.getFinishFlagBaseRgb(preset)
+					                 : Settings.getStartFlagBaseRgb(preset);
+					return (rgb >> (16 - channel * 8)) & 0xff;
+				}
+				return finish ? Settings.getFinishFlagCustomChannel(slot, channel)
+				              : Settings.getStartFlagCustomChannel(slot, channel);
+			}
+
+			@Override
+			public void setValue(int clamped) {
+				int preset = finish ? Settings.getFinishFlagColor() : Settings.getStartFlagColor();
+				int slot = finish ? Settings.getFinishFlagCustomSlotIndex(preset)
+				                  : Settings.getStartFlagCustomSlotIndex(preset);
+				if (slot < 0) return;
+				if (finish) Settings.setFinishFlagCustomChannel(slot, channel, clamped);
+				else        Settings.setStartFlagCustomChannel(slot, channel, clamped);
+			}
+
+			@Override
+			public boolean isCurrentPresetCustom() {
+				int preset = finish ? Settings.getFinishFlagColor() : Settings.getStartFlagColor();
+				int slot = finish ? Settings.getFinishFlagCustomSlotIndex(preset)
+				                  : Settings.getStartFlagCustomSlotIndex(preset);
+				return slot >= 0;
+			}
+
+			@Override
+			public void enterCopyFlow() {
+				setCurrentMenu(finish ? finishFlagCopyChooserScreen : startFlagCopyChooserScreen, false);
+			}
+		};
+		return new ChannelMenuElement(label, target);
+	}
+
+	private ChannelMenuElement makeBikeTintChannelRow(String label, final int channel) {
+		final ChannelMenuElement.ChannelTarget target = new ChannelMenuElement.ChannelTarget() {
+			@Override
+			public int getValue() {
+				int tint = Settings.getBikeTint();
+				int slot = Settings.getBikeCustomSlotIndex(tint);
+				if (slot < 0) {
+					// Built-in preset: surface the read-only target RGB so the
+					// user can see what they'd copy into a Custom slot. The
+					// row never enters edit mode on built-ins; the value is
+					// just shown.
+					int rgb = Settings.getBikeTintBaseRgb(tint);
+					return (rgb >> (16 - channel * 8)) & 0xff;
+				}
+				return Settings.getBikeCustomChannel(slot, channel);
+			}
+
+			@Override
+			public void setValue(int clamped) {
+				int slot = Settings.getBikeCustomSlotIndex(Settings.getBikeTint());
+				if (slot < 0) return;
+				Settings.setBikeCustomChannel(slot, channel, clamped);
+			}
+
+			@Override
+			public boolean isCurrentPresetCustom() {
+				return Settings.getBikeCustomSlotIndex(Settings.getBikeTint()) >= 0;
+			}
+
+			@Override
+			public void enterCopyFlow() {
+				setCurrentMenu(bikeTintCopyChooserScreen, false);
 			}
 		};
 		return new ChannelMenuElement(label, target);
@@ -1295,7 +1598,20 @@ public class Menu
 				highscoreHelpScreen, optionsHelpScreen,
 				nameScreen, managerScreen, managerInstalledScreen,
 				managerDownloadScreen, levelScreen,
-				colorsScreen, trackCopyChooserScreen, neonCopyChooserScreen,
+				colorsScreen, trackColorsScreen, bikeColorsScreen, skyColorsScreen, flagsColorsScreen,
+				trackCopyChooserScreen, neonCopyChooserScreen, skyCopyChooserScreen,
+				bikeTintCopyChooserScreen, startFlagCopyChooserScreen, finishFlagCopyChooserScreen,
+				// Long-cycle pickers (Track / Neon / Sky / Bike tint / Flag
+				// pole start+finish) push an auto-built list-picker subscreen
+				// via OptionsMenuElement.getCurrentMenu() — include them so
+				// their rows repaint when the sky preset (and thus dark-mode
+				// classification) changes.
+				trackColorOptionItem != null ? trackColorOptionItem.getCurrentMenu() : null,
+				neonColorOptionItem != null ? neonColorOptionItem.getCurrentMenu() : null,
+				skyColorOptionItem != null ? skyColorOptionItem.getCurrentMenu() : null,
+				bikeTintOptionItem != null ? bikeTintOptionItem.getCurrentMenu() : null,
+				startFlagColorOptionItem != null ? startFlagColorOptionItem.getCurrentMenu() : null,
+				finishFlagColorOptionItem != null ? finishFlagColorOptionItem.getCurrentMenu() : null,
 		};
 		for (MenuScreen s : screens) {
 			if (s != null && s.getLayout() != null) {
@@ -1486,10 +1802,31 @@ public class Menu
 			Settings.setImmersiveNavEnabled(enabled);
 			gd.applyImmersiveMode();
 		}
-		if (item == darkModeOptionItem) {
-			boolean enabled = ((OptionsMenuElement) item).getSelectedOption() == 0;
-			Settings.setDarkModeEnabled(enabled);
+		if (item == skyColorOptionItem) {
+			// 16-state cycle: 13 built-in hues + 3 Custom slots. Index matches
+			// Settings.SKY_* directly. applyDarkMode re-reads getMenuBgColor /
+			// getMenuFgColor, rebuilds the keypad, refreshes menu chrome, and
+			// flips system-bar icons — same flow the binary toggle triggered.
+			// Refresh the 6 sky channel rows so they reflect the new preset.
+			if (skyColorOptionItem._charvZ()) {
+				skyColorOptionItem.setSelectedOption(
+						skyColorOptionItem.getSelectedOption() + 1);
+			}
+			Settings.setSkyColor(skyColorOptionItem.getSelectedOption());
 			gd.applyDarkMode();
+			if (skyColorsScreen != null) skyColorsScreen.refreshSkyRows();
+			return;
+		}
+		if (item == skyGradientOptionItem) {
+			// 6-state cycle: Solid / Secondary / Linear / Reverse linear /
+			// Central / Reverse central. GameView._tryvV reads the mode and
+			// rebuilds its cached Paint/Shader on change — no notify needed.
+			if (skyGradientOptionItem._charvZ()) {
+				skyGradientOptionItem.setSelectedOption(
+						skyGradientOptionItem.getSelectedOption() + 1);
+			}
+			Settings.setSkyGradientMode(skyGradientOptionItem.getSelectedOption());
+			return;
 		}
 		if (item == fpsOverlayOptionItem) {
 			// GameView.onDraw / drawGame read the flag every frame, so the
@@ -1611,7 +1948,7 @@ public class Menu
 			int mode = trackColorOptionItem.getSelectedOption();
 			getLevelLoader().setTrackColorMode(mode);
 			Settings.setTrackColorMode(mode);
-			if (colorsScreen != null) colorsScreen.refreshTrackRows();
+			if (trackColorsScreen != null) trackColorsScreen.refreshTrackRows();
 			return;
 		}
 		if (item == mapColorGradientOptionItem) {
@@ -1660,6 +1997,43 @@ public class Menu
 			Settings.setGradientSteps(n);
 			return;
 		}
+		if (item == bikeTintOptionItem) {
+			// 13-state cycle: Auto / Natural / Dark / Medium / Light / White /
+			// Red / Blue / Green / Gold / Custom 1 / Custom 2 / Custom 3.
+			// Index matches Settings.BIKE_TINT_* directly. GameView reads
+			// Settings.getBikeTintRgb() per-frame via getSpriteTintPaint(),
+			// and the line-art setColor branch reads the same getter — no
+			// loader-cache mirror needed. Refresh tint rows so the Custom
+			// channel values update on preset change.
+			if (bikeTintOptionItem._charvZ()) {
+				bikeTintOptionItem.setSelectedOption(
+						bikeTintOptionItem.getSelectedOption() + 1);
+			}
+			Settings.setBikeTint(bikeTintOptionItem.getSelectedOption());
+			if (bikeColorsScreen != null) bikeColorsScreen.refreshBikeTintRows();
+			return;
+		}
+		if (item == startFlagColorOptionItem) {
+			// 12-state cycle: Auto / 8 built-ins / 3 Custom. GameView reads
+			// Settings.getStartFlagArgb() per draw of drawStartFlag; no
+			// loader-cache mirror needed (called once per flag, not hot).
+			if (startFlagColorOptionItem._charvZ()) {
+				startFlagColorOptionItem.setSelectedOption(
+						startFlagColorOptionItem.getSelectedOption() + 1);
+			}
+			Settings.setStartFlagColor(startFlagColorOptionItem.getSelectedOption());
+			if (flagsColorsScreen != null) flagsColorsScreen.refreshStartFlagRows();
+			return;
+		}
+		if (item == finishFlagColorOptionItem) {
+			if (finishFlagColorOptionItem._charvZ()) {
+				finishFlagColorOptionItem.setSelectedOption(
+						finishFlagColorOptionItem.getSelectedOption() + 1);
+			}
+			Settings.setFinishFlagColor(finishFlagColorOptionItem.getSelectedOption());
+			if (flagsColorsScreen != null) flagsColorsScreen.refreshFinishFlagRows();
+			return;
+		}
 		if (item == neonColorOptionItem) {
 			// 9-state cycle (6 built-in hues + 3 Custom slots). On change,
 			// re-pull the 3 neon channel rows so they reflect the newly
@@ -1672,7 +2046,7 @@ public class Menu
 			int color = neonColorOptionItem.getSelectedOption();
 			getLevelLoader().setNeonColor(color);
 			Settings.setNeonColor(color);
-			if (colorsScreen != null) colorsScreen.refreshNeonRows();
+			if (bikeColorsScreen != null) bikeColorsScreen.refreshNeonRows();
 			return;
 		}
 		if (item == driverSpriteOptionItem) {
@@ -1764,8 +2138,8 @@ public class Menu
 						Settings.setTrackColorMode(dstMode);
 						getLevelLoader().setTrackColorMode(dstMode);
 						trackColorOptionItem.setSelectedOption(dstMode);
-						colorsScreen.refreshTrackRows();
-						setCurrentMenu(colorsScreen, false);
+						trackColorsScreen.refreshTrackRows();
+						setCurrentMenu(trackColorsScreen, false);
 						return;
 					}
 					if (av >= ActionMenuElement.COPY_NEON_INTO_CUSTOM_1
@@ -1777,8 +2151,57 @@ public class Menu
 						Settings.setNeonColor(dstColor);
 						getLevelLoader().setNeonColor(dstColor);
 						neonColorOptionItem.setSelectedOption(dstColor);
-						colorsScreen.refreshNeonRows();
-						setCurrentMenu(colorsScreen, false);
+						bikeColorsScreen.refreshNeonRows();
+						setCurrentMenu(bikeColorsScreen, false);
+						return;
+					}
+					if (av >= ActionMenuElement.COPY_SKY_INTO_CUSTOM_1
+							&& av <= ActionMenuElement.COPY_SKY_INTO_CUSTOM_3) {
+						int slot = av - ActionMenuElement.COPY_SKY_INTO_CUSTOM_1;
+						int src = Settings.getSkyColor();
+						Settings.copySkyPresetIntoCustom(src, slot);
+						int dstPreset = Settings.SKY_CUSTOM_1 + slot;
+						Settings.setSkyColor(dstPreset);
+						skyColorOptionItem.setSelectedOption(dstPreset);
+						gd.applyDarkMode();
+						skyColorsScreen.refreshSkyRows();
+						setCurrentMenu(skyColorsScreen, false);
+						return;
+					}
+					if (av >= ActionMenuElement.COPY_BIKE_TINT_INTO_CUSTOM_1
+							&& av <= ActionMenuElement.COPY_BIKE_TINT_INTO_CUSTOM_3) {
+						int slot = av - ActionMenuElement.COPY_BIKE_TINT_INTO_CUSTOM_1;
+						int src = Settings.getBikeTint();
+						Settings.copyBikeTintIntoCustom(src, slot);
+						int dstTint = Settings.BIKE_TINT_CUSTOM_1 + slot;
+						Settings.setBikeTint(dstTint);
+						bikeTintOptionItem.setSelectedOption(dstTint);
+						bikeColorsScreen.refreshBikeTintRows();
+						setCurrentMenu(bikeColorsScreen, false);
+						return;
+					}
+					if (av >= ActionMenuElement.COPY_START_FLAG_INTO_CUSTOM_1
+							&& av <= ActionMenuElement.COPY_START_FLAG_INTO_CUSTOM_3) {
+						int slot = av - ActionMenuElement.COPY_START_FLAG_INTO_CUSTOM_1;
+						int src = Settings.getStartFlagColor();
+						Settings.copyStartFlagIntoCustom(src, slot);
+						int dstPreset = Settings.FLAG_POLE_COLOR_CUSTOM_1 + slot;
+						Settings.setStartFlagColor(dstPreset);
+						startFlagColorOptionItem.setSelectedOption(dstPreset);
+						flagsColorsScreen.refreshStartFlagRows();
+						setCurrentMenu(flagsColorsScreen, false);
+						return;
+					}
+					if (av >= ActionMenuElement.COPY_FINISH_FLAG_INTO_CUSTOM_1
+							&& av <= ActionMenuElement.COPY_FINISH_FLAG_INTO_CUSTOM_3) {
+						int slot = av - ActionMenuElement.COPY_FINISH_FLAG_INTO_CUSTOM_1;
+						int src = Settings.getFinishFlagColor();
+						Settings.copyFinishFlagIntoCustom(src, slot);
+						int dstPreset = Settings.FLAG_POLE_COLOR_CUSTOM_1 + slot;
+						Settings.setFinishFlagColor(dstPreset);
+						finishFlagColorOptionItem.setSelectedOption(dstPreset);
+						flagsColorsScreen.refreshFinishFlagRows();
+						setCurrentMenu(flagsColorsScreen, false);
 						return;
 					}
 				}

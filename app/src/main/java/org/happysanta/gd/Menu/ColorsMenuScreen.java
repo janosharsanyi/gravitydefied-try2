@@ -23,6 +23,10 @@ public class ColorsMenuScreen extends MenuScreen {
 
 	private final List<ChannelMenuElement> trackRows = new ArrayList<>();
 	private final List<ChannelMenuElement> neonRows = new ArrayList<>();
+	private final List<ChannelMenuElement> skyRows = new ArrayList<>();
+	private final List<ChannelMenuElement> bikeTintRows = new ArrayList<>();
+	private final List<ChannelMenuElement> startFlagRows = new ArrayList<>();
+	private final List<ChannelMenuElement> finishFlagRows = new ArrayList<>();
 
 	public ColorsMenuScreen(String title, MenuScreen navTarget) {
 		super(title, navTarget);
@@ -38,6 +42,26 @@ public class ColorsMenuScreen extends MenuScreen {
 		neonRows.add(row);
 	}
 
+	/** Register a row that belongs to the sky primary/secondary group. */
+	public void registerSkyRow(ChannelMenuElement row) {
+		skyRows.add(row);
+	}
+
+	/** Register a row that belongs to the bike tint channel group. */
+	public void registerBikeTintRow(ChannelMenuElement row) {
+		bikeTintRows.add(row);
+	}
+
+	/** Register a row that belongs to the start-flag pole channel group. */
+	public void registerStartFlagRow(ChannelMenuElement row) {
+		startFlagRows.add(row);
+	}
+
+	/** Register a row that belongs to the finish-flag pole channel group. */
+	public void registerFinishFlagRow(ChannelMenuElement row) {
+		finishFlagRows.add(row);
+	}
+
 	/** Re-pull values from Settings on every track row. Called after a
 	 * track preset change or after a copy-into-Custom completes. */
 	public void refreshTrackRows() {
@@ -46,6 +70,22 @@ public class ColorsMenuScreen extends MenuScreen {
 
 	public void refreshNeonRows() {
 		for (ChannelMenuElement row : neonRows) row.refresh();
+	}
+
+	public void refreshSkyRows() {
+		for (ChannelMenuElement row : skyRows) row.refresh();
+	}
+
+	public void refreshBikeTintRows() {
+		for (ChannelMenuElement row : bikeTintRows) row.refresh();
+	}
+
+	public void refreshStartFlagRows() {
+		for (ChannelMenuElement row : startFlagRows) row.refresh();
+	}
+
+	public void refreshFinishFlagRows() {
+		for (ChannelMenuElement row : finishFlagRows) row.refresh();
 	}
 
 	@Override
