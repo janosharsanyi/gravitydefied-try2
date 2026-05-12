@@ -1290,31 +1290,38 @@ public class GameView extends View {
 		else
 			canvas = g;
 		if (m_oI != 0) {
-			// Splash background tracks the dark-mode toggle so the loading
-			// screens don't flash white before the menu loads. Logos are
-			// drawn with the sprite tint paint when dark mode is on so the
-			// (mostly-black) artwork stays visible against the black bg.
-			// (The codebrew PNG was re-encoded so its surround is true
-			// transparent — the themed bg shows through cleanly without a
-			// visible white/black box around the artwork.)
+			// Splash background tracks the chosen sky theme AND gradient
+			// mode so the loading screens are visually consistent with the
+			// in-game render from the very first frame. Same cached
+			// ensureSkyPaint() as _tryvV(); the cache is keyed on
+			// (mode, primary, secondary, w, h) so the splash and in-game
+			// share the Paint/Shader once sizes match. Logos are drawn
+			// through getSplashInvertPaint so (mostly-black) artwork stays
+			// visible against a dark sky. (The PNGs were re-encoded with
+			// true alpha so the gradient shows through cleanly without a
+			// visible white/black box around the marks.)
+			int sw = getScaledWidth();
+			int sh = getScaledHeight();
+			Paint skyP = ensureSkyPaint(
+					Settings.getSkyGradientMode(),
+					Settings.getSkyPrimaryArgb(),
+					Settings.getSkySecondaryArgb(),
+					sw, sh);
+			canvas.drawRect(0, 0, sw, sh, skyP);
 			if (m_oI == 1) {
 				// Draw codebrew
-				paint.setColor(Settings.getMenuBgColor());
-				canvas.drawRect(0, 0, getScaledWidth(), getScaledHeight(), paint);
 				if (Bitmap.get(Bitmap.CODEBREW_LOGO) != null) {
 					drawBitmap(Bitmap.get(Bitmap.CODEBREW_LOGO),
-							getScaledWidth() / 2 - Bitmap.get(Bitmap.CODEBREW_LOGO).getWidthDp() / 2,
-							(float) (getScaledHeight() / 2 - Bitmap.get(Bitmap.CODEBREW_LOGO).getHeightDp() / 1.6),
+							sw / 2 - Bitmap.get(Bitmap.CODEBREW_LOGO).getWidthDp() / 2,
+							(float) (sh / 2 - Bitmap.get(Bitmap.CODEBREW_LOGO).getHeightDp() / 1.6),
 							canvas, getSplashInvertPaint());
 				}
 			} else {
 				// Draw gd
-				paint.setColor(Settings.getMenuBgColor());
-				canvas.drawRect(0, 0, getScaledWidth(), getScaledHeight(), paint);
 				if (Bitmap.get(Bitmap.GD_LOGO) != null) {
 					drawBitmap(Bitmap.get(Bitmap.GD_LOGO),
-							getScaledWidth() / 2 - Bitmap.get(Bitmap.GD_LOGO).getWidthDp() / 2,
-							(float) (getScaledHeight() / 2 - Bitmap.get(Bitmap.GD_LOGO).getHeightDp() / 1.6),
+							sw / 2 - Bitmap.get(Bitmap.GD_LOGO).getWidthDp() / 2,
+							(float) (sh / 2 - Bitmap.get(Bitmap.GD_LOGO).getHeightDp() / 1.6),
 							canvas, getSplashInvertPaint());
 				}
 			}
