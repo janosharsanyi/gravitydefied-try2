@@ -1545,6 +1545,21 @@ public class GDActivity extends ComponentActivity implements Runnable {
                     btnText.setTextColor(Settings.getKeypadTextColor());
                     btnText.setTextSize(17);
                     btn.setBackgroundResource(getResources().getIdentifier("btn_n", "drawable", getPackageName()));
+                    // The btn_n_up/btn_n_down 9-patches are upstream light-theme
+                    // assets — pressed state darkens slightly. Against the dark
+                    // keypad row bg in dark mode that darken-on-press is barely
+                    // visible, so layer a translucent-white press overlay on top
+                    // to give the press the same magnitude of feedback in the
+                    // opposite direction (lighten instead of darken).
+                    if (Settings.isDarkModeEnabled()) {
+                        android.graphics.drawable.StateListDrawable pressOverlay =
+                                new android.graphics.drawable.StateListDrawable();
+                        pressOverlay.addState(new int[]{android.R.attr.state_pressed},
+                                new android.graphics.drawable.ColorDrawable(0x40ffffff));
+                        pressOverlay.addState(new int[]{},
+                                new android.graphics.drawable.ColorDrawable(0x00000000));
+                        btn.setForeground(pressOverlay);
+                    }
                     btn.addView(btnText, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
                     btn.setGravity(Gravity.CENTER);
                     btn.setWeightSum(1);
